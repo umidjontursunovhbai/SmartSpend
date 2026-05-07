@@ -248,10 +248,12 @@ Absolutely! SmartSpend works 100% offline since all data is stored locally on yo
 
 ## 📊 Roadmap
 
+### ✅ Shipped
+- [x] **iOS Widgets** - Home screen (small/medium/large with interactive Add Expense button), lock screen (circular/rectangular/inline), and Control Center shortcut (iOS 18+)
+
 ### Planned Features
 - [ ] **iCloud Sync** - Sync expenses across devices
 - [ ] **Apple Watch App** - Track expenses from your wrist
-- [ ] **iOS Widgets** - Quick expense overview on home screen and lock screen
 - [ ] **Advanced Reporting** - Detailed PDF reports with charts
 - [ ] **Receipt Scanning** - OCR-powered receipt capture
 - [ ] **Budget Alerts** - Notifications when approaching budget limits

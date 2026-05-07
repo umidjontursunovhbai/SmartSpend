@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import WidgetKit
 
 enum TimePeriod: String, CaseIterable {
     case today = "Today"
@@ -47,7 +48,9 @@ class DataManager: ObservableObject {
     @Published var selectedTimePeriod: TimePeriod = .currentMonth
     @Published var customStartDate: Date = Date()
     @Published var customEndDate: Date = Date()
-    
+
+    private let sharedDefaults = UserDefaults(suiteName: "group.muydinov.SmartSpend") ?? UserDefaults.standard
+
     private init() {
         self.user = User(currency: .usd, language: .english)
         loadData()
@@ -62,85 +65,86 @@ class DataManager: ObservableObject {
             
             // Save to local UserDefaults
             let expensesData = try encoder.encode(expenses)
-            UserDefaults.standard.set(expensesData, forKey: "expenses")
+            sharedDefaults.set(expensesData, forKey: "expenses")
             
             let userData = try encoder.encode(user)
-            UserDefaults.standard.set(userData, forKey: "user")
+            sharedDefaults.set(userData, forKey: "user")
             
             let deletedExpensesData = try encoder.encode(deletedExpenses)
-            UserDefaults.standard.set(deletedExpensesData, forKey: "archivedExpenses")
+            sharedDefaults.set(deletedExpensesData, forKey: "archivedExpenses")
             
             let categoryBudgetsData = try encoder.encode(categoryBudgets)
-            UserDefaults.standard.set(categoryBudgetsData, forKey: "categoryBudgets")
+            sharedDefaults.set(categoryBudgetsData, forKey: "categoryBudgets")
             
             let spendingGoalsData = try encoder.encode(spendingGoals)
-            UserDefaults.standard.set(spendingGoalsData, forKey: "spendingGoals")
+            sharedDefaults.set(spendingGoalsData, forKey: "spendingGoals")
             
             let monthlySalariesData = try encoder.encode(monthlySalaries)
-            UserDefaults.standard.set(monthlySalariesData, forKey: "monthlySalaries")
+            sharedDefaults.set(monthlySalariesData, forKey: "monthlySalaries")
             
             let recurringExpensesData = try encoder.encode(recurringExpenses)
-            UserDefaults.standard.set(recurringExpensesData, forKey: "recurringExpenses")
+            sharedDefaults.set(recurringExpensesData, forKey: "recurringExpenses")
             
             let learnedPatternsData = try encoder.encode(learnedPatterns)
-            UserDefaults.standard.set(learnedPatternsData, forKey: "learnedPatterns")
+            sharedDefaults.set(learnedPatternsData, forKey: "learnedPatterns")
             
             let userCategoriesData = try encoder.encode(userCategories)
-            UserDefaults.standard.set(userCategoriesData, forKey: "userCategories")
+            sharedDefaults.set(userCategoriesData, forKey: "userCategories")
             
             // Save custom date range
-            UserDefaults.standard.set(customStartDate, forKey: "customStartDate")
-            UserDefaults.standard.set(customEndDate, forKey: "customEndDate")
+            sharedDefaults.set(customStartDate, forKey: "customStartDate")
+            sharedDefaults.set(customEndDate, forKey: "customEndDate")
             
         } catch {
             print("Error saving data: \(error)")
         }
+        WidgetCenter.shared.reloadAllTimelines()
     }
-    
+
     private func loadData() {
         let decoder = JSONDecoder()
         
-        if let expensesData = UserDefaults.standard.data(forKey: "expenses"),
+        if let expensesData = sharedDefaults.data(forKey: "expenses"),
            let decodedExpenses = try? decoder.decode([Expense].self, from: expensesData) {
             self.expenses = decodedExpenses
         }
         
-        if let userData = UserDefaults.standard.data(forKey: "user"),
+        if let userData = sharedDefaults.data(forKey: "user"),
            let decodedUser = try? decoder.decode(User.self, from: userData) {
             self.user = decodedUser
         }
         
-        if let deletedExpensesData = UserDefaults.standard.data(forKey: "archivedExpenses"),
+        if let deletedExpensesData = sharedDefaults.data(forKey: "archivedExpenses"),
            let decodedDeletedExpenses = try? decoder.decode([ArchivedExpense].self, from: deletedExpensesData) {
             self.deletedExpenses = decodedDeletedExpenses
         }
         
-        if let categoryBudgetsData = UserDefaults.standard.data(forKey: "categoryBudgets"),
+        if let categoryBudgetsData = sharedDefaults.data(forKey: "categoryBudgets"),
            let decodedCategoryBudgets = try? decoder.decode([CategoryBudget].self, from: categoryBudgetsData) {
             self.categoryBudgets = decodedCategoryBudgets
         }
         
-        if let spendingGoalsData = UserDefaults.standard.data(forKey: "spendingGoals"),
+        if let spendingGoalsData = sharedDefaults.data(forKey: "spendingGoals"),
            let decodedSpendingGoals = try? decoder.decode([SpendingGoal].self, from: spendingGoalsData) {
             self.spendingGoals = decodedSpendingGoals
         }
         
-        if let monthlySalariesData = UserDefaults.standard.data(forKey: "monthlySalaries"),
+        if let monthlySalariesData = sharedDefaults.data(forKey: "monthlySalaries"),
            let decodedMonthlySalaries = try? decoder.decode([MonthlySalary].self, from: monthlySalariesData) {
             self.monthlySalaries = decodedMonthlySalaries
         }
         
-        if let recurringExpensesData = UserDefaults.standard.data(forKey: "recurringExpenses"),
+        if let recurringExpensesData = sharedDefaults.data(forKey: "recurringExpenses"),
            let decodedRecurringExpenses = try? decoder.decode([RecurringExpense].self, from: recurringExpensesData) {
             self.recurringExpenses = decodedRecurringExpenses
         }
         
-        if let learnedPatternsData = UserDefaults.standard.data(forKey: "learnedPatterns"),
+        if let learnedPatternsData = sharedDefaults.data(forKey: "learnedPatterns"),
            let decodedLearnedPatterns = try? decoder.decode([LearnedPattern].self, from: learnedPatternsData) {
             self.learnedPatterns = decodedLearnedPatterns
         }
         
-        if let userCategoriesData = UserDefaults.standard.data(forKey: "userCategories"),
+        if let userCategoriesData = sharedDefaults.data(forKey: "userCategories"),
            let decodedUserCategories = try? decoder.decode([UserCategory].self, from: userCategoriesData) {
             self.userCategories = decodedUserCategories
         }
@@ -149,10 +153,10 @@ class DataManager: ObservableObject {
         // Categories must be explicitly created by the user or imported.
         
         // Load custom date range
-        if let savedStartDate = UserDefaults.standard.object(forKey: "customStartDate") as? Date {
+        if let savedStartDate = sharedDefaults.object(forKey: "customStartDate") as? Date {
             self.customStartDate = savedStartDate
         }
-        if let savedEndDate = UserDefaults.standard.object(forKey: "customEndDate") as? Date {
+        if let savedEndDate = sharedDefaults.object(forKey: "customEndDate") as? Date {
             self.customEndDate = savedEndDate
         }
         

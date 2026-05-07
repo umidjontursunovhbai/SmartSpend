@@ -3,7 +3,9 @@ import SwiftUI
 struct MainTabView: View {
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var tabManager = TabManager.shared
-    
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var showingAddExpense = false
+
     var body: some View {
         TabView(selection: $tabManager.selectedTab) {
             DashboardView()
@@ -11,25 +13,25 @@ struct MainTabView: View {
                     Label("dashboard".localized, systemImage: "house.fill")
                 }
                 .tag(0)
-            
+
             ExpenseListView()
                 .tabItem {
                     Label("expenses".localized, systemImage: "list.bullet.rectangle")
                 }
                 .tag(1)
-            
+
             AnalyticsView()
                 .tabItem {
                     Label("analytics".localized, systemImage: "chart.bar.fill")
                 }
                 .tag(2)
-            
+
             RecurringExpensesView()
                 .tabItem {
                     Label("recurring".localized, systemImage: "repeat")
                 }
                 .tag(3)
-            
+
             SettingsView()
                 .tabItem {
                     Label("settings".localized, systemImage: "gear")
@@ -37,6 +39,21 @@ struct MainTabView: View {
                 .tag(4)
         }
         .tint(Color(.systemBlue))
+        .sheet(isPresented: $showingAddExpense) {
+            AddExpenseView()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                checkAddExpenseIntent()
+            }
+        }
+    }
+
+    private func checkAddExpenseIntent() {
+        let defaults = UserDefaults(suiteName: "group.muydinov.SmartSpend") ?? UserDefaults.standard
+        guard defaults.bool(forKey: "openAddExpense") else { return }
+        defaults.removeObject(forKey: "openAddExpense")
+        showingAddExpense = true
     }
 }
 
