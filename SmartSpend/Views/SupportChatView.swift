@@ -24,7 +24,7 @@ struct SupportChatView: View {
                                 systemImage: isUp ? "arrow.up.right" : "arrow.down.right"
                             )
                             .font(.subheadline)
-                            .foregroundStyle(isUp ? .red : .green)
+                            .foregroundStyle(isUp ? Color.green : Color.red)
                         }
                     }
                 } header: {
@@ -128,20 +128,20 @@ struct SupportChatView: View {
             if change < -10 {
                 results.append(SpendingInsight(
                     id: "good_trend",
-                    icon: "checkmark.seal.fill",
-                    iconColor: .green,
+                    icon: "arrow.down.circle.fill",
+                    iconColor: .red,
                     title: "Spending down \(String(format: "%.0f%%", abs(change)))",
-                    detail: "You're spending significantly less than last month. Keep it up!",
-                    type: .positive
+                    detail: "You're spending significantly less than last month.",
+                    type: .info
                 ))
             } else if change > 30 {
                 results.append(SpendingInsight(
                     id: "up_trend",
                     icon: "arrow.up.circle.fill",
-                    iconColor: .red,
+                    iconColor: .green,
                     title: "Spending up \(String(format: "%.0f%%", change)) this month",
-                    detail: "You're spending considerably more than last month",
-                    type: .warning
+                    detail: "You're spending considerably more than last month.",
+                    type: .info
                 ))
             }
         }
