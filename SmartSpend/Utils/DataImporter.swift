@@ -3,6 +3,7 @@ import SwiftUI
 
 class DataImporter: ObservableObject {
     static let shared = DataImporter()
+    private let fallbackCategoryName = "Other"
     
     private init() {}
     
@@ -126,7 +127,11 @@ class DataImporter: ObservableObject {
                     // This prevents the error where a date column is misidentified as a category
                     if !normalized.isEmpty && parseDate(normalized) == nil {
                         foundCategories.insert(normalized)
+                    } else {
+                        foundCategories.insert(fallbackCategoryName)
                     }
+                } else {
+                    foundCategories.insert(fallbackCategoryName)
                 }
             }
             print("📝 Found \(foundCategories.count) unique categories: \(foundCategories)")
@@ -148,7 +153,7 @@ class DataImporter: ObservableObject {
                         print("   Mapped '\(categoryName)' to existing user category")
                     } else {
                         // Create new UserCategory
-                        let newUserCategory = UserCategory(name: categoryName)
+                        let newUserCategory = UserCategory.imported(name: categoryName)
                         dataManager.addUserCategory(newUserCategory)
                         categoryMap[normalized] = newUserCategory.id
                         print("   Created new user category for '\(categoryName)'")
@@ -623,14 +628,13 @@ class DataImporter: ObservableObject {
         let normalized = categoryString.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         
         if normalized.isEmpty {
-            // resolveCategory will return a default/fallback
-            return DataManager.shared.resolveCategory(id: UUID()).id
+            return fallbackCategoryId(from: categoryMap)
         }
         
         // Validation: If the category string parses as a valid date, it's likely a mapping error
         if parseDate(categoryString) != nil {
             print("⚠️ Warning: Category value '\(categoryString)' looks like a date. Ignoring to prevent miscategorization.")
-             return DataManager.shared.resolveCategory(id: UUID()).id
+            return fallbackCategoryId(from: categoryMap)
         }
         
         // Look up the UserCategory ID from the map
@@ -638,7 +642,16 @@ class DataImporter: ObservableObject {
             return id
         }
         
-        print("⚠️ Warning: Category '\(categoryString)' (normalized: '\(normalized)') not found in map. Falling back to General.")
-        return DataManager.shared.resolveCategory(id: UUID()).id
+        print("⚠️ Warning: Category '\(categoryString)' (normalized: '\(normalized)') not found in map. Falling back to \(fallbackCategoryName).")
+        return fallbackCategoryId(from: categoryMap)
+    }
+
+    private func fallbackCategoryId(from categoryMap: [String: UUID]) -> UUID {
+        if let fallbackId = categoryMap[fallbackCategoryName.lowercased()] {
+            return fallbackId
+        }
+
+        assertionFailure("Import fallback category was not created before parsing expenses.")
+        return UUID()
     }
 }

@@ -822,10 +822,7 @@ class DataManager: ObservableObject {
         if let category = getCategory(id: id) {
             return category
         }
-        // Fallback
-        if let first = userCategories.first {
-            return first
-        }
+
         return UserCategory.createDefault()
     }
     
@@ -987,4 +984,3 @@ class DataManager: ObservableObject {
         return min(getTotalExpensesForPeriod() / salary, 1.0)
     }
 }
-

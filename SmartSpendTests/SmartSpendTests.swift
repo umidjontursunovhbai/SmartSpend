@@ -19,17 +19,17 @@ struct SmartSpendTests {
 
     @Test("Expense creation")
     func expenseCreation() async throws {
+        let categoryId = UUID()
         let expense = Expense(
             title: "Test Expense",
             amount: 100.0,
-            category: .other,
+            categoryId: categoryId,
             date: Date()
         )
         
         #expect(expense.title == "Test Expense")
         #expect(expense.amount == 100.0)
-        #expect(expense.category == .other)
-        #expect(expense.id != nil)
+        #expect(expense.categoryId == categoryId)
     }
     
     @Test("Monthly salary creation")
@@ -46,5 +46,16 @@ struct SmartSpendTests {
         #expect(salary.amount == 5000.0)
         #expect(salary.currency == .usd)
         #expect(salary.id != nil)
+    }
+
+    @Test("Imported category gets default style")
+    func importedCategoryDefaultStyle() async throws {
+        let food = UserCategory.imported(name: "Food")
+        let other = UserCategory.imported(name: "Other")
+
+        #expect(food.iconSystemName == "fork.knife")
+        #expect(food.colorName == "systemOrange")
+        #expect(other.iconSystemName == "tag.fill")
+        #expect(other.colorName == "systemGray")
     }
 }

@@ -4,8 +4,7 @@ struct CategoryManagementView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
 
-    @State private var editingCategory: UserCategory? = nil
-    @State private var showingEditor = false
+    @State private var editorRoute: CategoryEditorRoute?
 
     var body: some View {
         NavigationStack {
@@ -27,8 +26,7 @@ struct CategoryManagementView: View {
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            editingCategory = category
-                            showingEditor = true
+                            editorRoute = .edit(category)
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
@@ -39,8 +37,7 @@ struct CategoryManagementView: View {
                         }
                         .swipeActions(edge: .leading) {
                             Button {
-                                editingCategory = category
-                                showingEditor = true
+                                editorRoute = .edit(category)
                             } label: {
                                 Label("Edit", systemImage: "pencil")
                             }
@@ -55,17 +52,39 @@ struct CategoryManagementView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        editingCategory = nil
-                        showingEditor = true
+                        editorRoute = .add
                     } label: {
                         Image(systemName: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $showingEditor) {
-                CategoryEditorView(category: editingCategory)
+            .sheet(item: $editorRoute) { route in
+                CategoryEditorView(category: route.category)
                     .presentationDetents([.large])
             }
+        }
+    }
+}
+
+private enum CategoryEditorRoute: Identifiable {
+    case add
+    case edit(UserCategory)
+
+    var id: String {
+        switch self {
+        case .add:
+            return "add"
+        case .edit(let category):
+            return category.id.uuidString
+        }
+    }
+
+    var category: UserCategory? {
+        switch self {
+        case .add:
+            return nil
+        case .edit(let category):
+            return category
         }
     }
 }
