@@ -255,7 +255,6 @@ Absolutely! SmartSpend works 100% offline since all data is stored locally on yo
 - [ ] **iCloud Sync** - Sync expenses across devices
 - [ ] **Apple Watch App** - Track expenses from your wrist
 - [ ] **Advanced Reporting** - Detailed PDF reports with charts
-- [ ] **Receipt Scanning** - OCR-powered receipt capture
 - [ ] **Budget Alerts** - Notifications when approaching budget limits
 - [ ] **Family Sharing** - Share budgets with family members
 - [ ] **Banking Integration** - Automatic expense import from banks

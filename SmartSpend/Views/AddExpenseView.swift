@@ -12,7 +12,6 @@ struct AddExpenseView: View {
     @State private var categorySuggestions: [(category: UserCategory, confidence: Double)] = []
     @State private var suggestedPrice: Double?
     @State private var showingCategoryManagement = false
-    @State private var showingScanner = false
 
     var body: some View {
         NavigationStack {
@@ -113,29 +112,11 @@ struct AddExpenseView: View {
                 }
                 
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button(action: { showingScanner = true }) {
-                            Image(systemName: "doc.text.viewfinder")
-                                .font(.headline)
-                        }
-                        
-                        Button("save".localized) {
-                            saveExpense()
-                        }
-                        .disabled(title.isEmpty || amount.isEmpty || getNumericValue(from: amount) == nil || selectedCategory == nil)
-                        .fontWeight(.semibold)
+                    Button("save".localized) {
+                        saveExpense()
                     }
-                }
-            }
-            .sheet(isPresented: $showingScanner) {
-                ScannerView { result in
-                    if let amountValue = result.amount {
-                        self.amount = formatNumberWithCommas(amountValue)
-                    }
-                    if let dateValue = result.date {
-                        self.selectedDate = dateValue
-                    }
-                    checkForSuggestions()
+                    .disabled(title.isEmpty || amount.isEmpty || getNumericValue(from: amount) == nil || selectedCategory == nil)
+                    .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $showingCategoryManagement) {

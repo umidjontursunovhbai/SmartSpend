@@ -110,6 +110,9 @@ extension UserCategory {
         if normalized.contains("salary") || normalized.contains("income") || normalized.contains("pay") {
             return "systemGreen"
         }
+        if normalized.contains("other") || normalized.contains("misc") || normalized.contains("unknown") {
+            return "systemGray"
+        }
 
         let colors = presetColors.filter { $0 != "systemGray" }
         let unicodeTotal = normalized.unicodeScalars.reduce(0) { $0 + Int($1.value) }
@@ -141,4 +144,3 @@ extension UserCategory {
         "systemPink", "systemBrown", "systemGray"
     ]
 }
-
