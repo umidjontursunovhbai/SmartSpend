@@ -93,6 +93,7 @@ extension String {
             "add_expense": "Add Expense",
             "expense_title_placeholder": "Enter expense title...",
             "category": "Category",
+            "select_category": "Select Category",
             "create_new_category": "Create New Category",
             "column_date": "Date",
             "expense_details": "Expense Details",

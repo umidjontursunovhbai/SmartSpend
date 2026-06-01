@@ -63,99 +63,69 @@ struct AnalyticsView: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private var spendingHighlights: some View {
-        VStack(spacing: 12) {
-            // Hero card — primary metric
-            VStack(alignment: .leading, spacing: 8) {
-                Label("spent".localized, systemImage: "banknote.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.75))
+        VStack(spacing: 0) {
+            // Primary metric
+            VStack(alignment: .leading, spacing: 6) {
+                Text("spent".localized.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Text(CurrencyFormatter.format(currentPeriodTotal, currency: dataManager.user.currency))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 36, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                 if previousPeriodTotal > 0 {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Image(systemName: spendingChangePercentage >= 0 ? "arrow.up.right" : "arrow.down.right")
-                            .font(.caption.bold())
                         Text(trendSummary)
-                            .font(.caption.weight(.medium))
                     }
-                    .foregroundStyle(.white.opacity(0.85))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(.white.opacity(0.15), in: Capsule())
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(spendingChangePercentage >= 0 ? .red : .green)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
-            .background(
-                LinearGradient(
-                    colors: [Color(.systemBlue), Color(.systemIndigo)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-            )
+            .padding(16)
 
-            // Secondary stats row
-            HStack(spacing: 12) {
-                miniHighlightCard(
-                    title: "daily_avg".localized,
-                    value: CurrencyFormatter.format(averageDailySpend, currency: dataManager.user.currency),
-                    icon: "chart.line.uptrend.xyaxis",
-                    color: .purple
-                )
-                miniHighlightCard(
-                    title: "Transactions",
-                    value: "\(expensesCount)",
-                    icon: "list.bullet.rectangle.portrait.fill",
-                    color: .teal
-                )
+            Divider().padding(.leading, 16)
+
+            // Secondary stats
+            HStack(spacing: 0) {
+                statColumn(title: "daily_avg".localized,
+                           value: CurrencyFormatter.format(averageDailySpend, currency: dataManager.user.currency))
+                Divider().frame(height: 36)
+                statColumn(title: "Transactions", value: "\(expensesCount)")
+                Divider().frame(height: 36)
+                statColumn(title: "categories".localized, value: "\(categoriesUsedCount)")
             }
+            .padding(.vertical, 12)
         }
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func miniHighlightCard(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(color)
-                .frame(width: 36, height: 36)
-                .background(color.opacity(0.12), in: Circle())
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.subheadline.bold())
-                    .fontDesign(.rounded)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
+    private func statColumn(title: String, value: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.headline)
+                .fontDesign(.rounded)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 8)
     }
-    
+
     private var categoryBreakdownSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("category_breakdown".localized)
-                .font(.headline)
-                .fontWeight(.semibold)
-            
+            sectionHeader("category_breakdown".localized)
+
             if currentPeriodExpenses.isEmpty {
-                Text("no_expenses_found".localized)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                emptyState
             } else {
                 let data = groupExpensesByCategory(currentPeriodExpenses)
                 HStack(spacing: 20) {
@@ -163,53 +133,50 @@ struct AnalyticsView: View {
                         ForEach(Array(data.keys), id: \.id) { category in
                             SectorMark(
                                 angle: .value("Amount", data[category] ?? 0),
-                                innerRadius: .ratio(0.618),
+                                innerRadius: .ratio(0.62),
                                 angularInset: 1.5
                             )
                             .cornerRadius(4)
-                            .foregroundStyle(by: .value("Category", category.name))
+                            .foregroundStyle(category.color)
                         }
                     }
                     .chartLegend(.hidden)
-                    .frame(width: 140, height: 140)
+                    .frame(width: 130, height: 130)
                     .overlay {
-                        VStack {
+                        VStack(spacing: 0) {
                             Text("\(categoriesUsedCount)")
-                                .font(.title3.bold())
+                                .font(.title2.bold())
                                 .fontDesign(.rounded)
                             Text("categories".localized)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(data.keys.prefix(4)), id: \.id) { category in
-                            HStack {
+                        ForEach(Array(data.keys.sorted { (data[$0] ?? 0) > (data[$1] ?? 0) }.prefix(4)), id: \.id) { category in
+                            HStack(spacing: 8) {
                                 Circle().fill(category.color).frame(width: 8, height: 8)
                                 Text(category.name)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                                 Spacer()
                                 Text(CurrencyFormatter.format(data[category] ?? 0, currency: dataManager.user.currency))
-                                    .font(.caption)
-                                    .fontWeight(.bold)
+                                    .font(.caption.weight(.semibold))
                             }
                         }
                     }
                 }
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .cardStyle()
     }
-    
+
     private var categoryBudgetSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("budget_progress".localized)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                sectionHeader("budget_progress".localized)
                 Spacer()
                 Button("manage".localized) {
                     showingBudgetSettings = true
@@ -217,60 +184,49 @@ struct AnalyticsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.tint)
             }
-            
-            LazyVStack(spacing: 12) {
-                let activeBudgets = dataManager.categoryBudgets.filter { $0.isEnabled }
-                ForEach(activeBudgets) { budget in
-                    CategoryBudgetRow(budget: budget)
-                }
-                
-                if activeBudgets.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "target")
-                            .font(.system(size: 30))
-                            .foregroundStyle(.secondary)
-                        Text("no_budget_set".localized)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+
+            let activeBudgets = dataManager.categoryBudgets.filter { $0.isEnabled }
+            if activeBudgets.isEmpty {
+                Text("no_budget_set".localized)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 16) {
+                    ForEach(activeBudgets) { budget in
+                        CategoryBudgetRow(budget: budget)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
                 }
             }
         }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .cardStyle()
     }
-    
+
     private var spendingTrendSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("spending_trends".localized)
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                    sectionHeader("spending_trends".localized)
                     Text(trendSubtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(trendSummary)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule().fill(spendingChangePercentage >= 0 ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
-                    )
-                    .foregroundStyle(spendingChangePercentage >= 0 ? Color.red : Color.green)
+                if previousPeriodTotal > 0 {
+                    Text(trendSummary)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(spendingChangePercentage >= 0 ? Color.red.opacity(0.12) : Color.green.opacity(0.12))
+                        )
+                        .foregroundStyle(spendingChangePercentage >= 0 ? Color.red : Color.green)
+                }
             }
-                        
+
             if dailySpendingPoints.isEmpty {
-                Text("no_expenses_found".localized)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                emptyState
             } else {
                 Chart {
                     ForEach(dailySpendingPoints) { point in
@@ -278,8 +234,9 @@ struct AnalyticsView: View {
                             x: .value("Date", point.date),
                             y: .value("Amount", point.amount)
                         )
-                        .foregroundStyle(Color.accentColor.gradient.opacity(0.25))
-                        
+                        .foregroundStyle(Color.accentColor.opacity(0.18).gradient)
+                        .interpolationMethod(.catmullRom)
+
                         LineMark(
                             x: .value("Date", point.date),
                             y: .value("Amount", point.amount)
@@ -287,14 +244,6 @@ struct AnalyticsView: View {
                         .foregroundStyle(Color.accentColor)
                         .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                         .interpolationMethod(.catmullRom)
-                        
-                        if point.date == highestSpendingDay?.date {
-                            PointMark(
-                                x: .value("Date", point.date),
-                                y: .value("Amount", point.amount)
-                            )
-                            .foregroundStyle(Color.red)
-                        }
                     }
                 }
                 .chartXAxis {
@@ -303,56 +252,65 @@ struct AnalyticsView: View {
                 .chartYAxis {
                     AxisMarks(position: .leading)
                 }
-                .frame(height: 220)
+                .frame(height: 200)
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .cardStyle()
     }
-    
+
     private var peakSpendingDaysSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("peak_days".localized)
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            ForEach(Array(peakSpendingDays.prefix(3).enumerated()), id: \.offset) { index, day in
-                HStack(spacing: 12) {
-                    VStack {
-                        Text("#\(index + 1)")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                    }
-                    .frame(width: 36, height: 36)
-                    .background(Color.accentColor, in: Circle())
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(dayLabel(for: day.date))
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeader("peak_days".localized)
+
+            if peakSpendingDays.isEmpty {
+                emptyState
+            } else {
+                ForEach(Array(peakSpendingDays.prefix(3).enumerated()), id: \.offset) { index, day in
+                    HStack(spacing: 12) {
+                        Text("\(index + 1)")
                             .font(.subheadline.weight(.semibold))
-                        Text(day.date.formatted(date: .abbreviated, time: .omitted))
-                            .font(.caption)
                             .foregroundStyle(.secondary)
+                            .frame(width: 20)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(dayLabel(for: day.date))
+                                .font(.subheadline)
+                            Text(day.date.formatted(date: .abbreviated, time: .omitted))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(CurrencyFormatter.format(day.amount, currency: dataManager.user.currency))
+                                .font(.subheadline.weight(.medium))
+                            Text(peakPercentage(for: day.amount))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(CurrencyFormatter.format(day.amount, currency: dataManager.user.currency))
-                            .font(.subheadline.weight(.semibold))
-                        Text(peakPercentage(for: day.amount))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    if index < min(2, peakSpendingDays.count - 1) {
+                        Divider()
                     }
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .cardStyle()
+    }
+
+    // MARK: - Shared building blocks
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+    }
+
+    private var emptyState: some View {
+        Text("no_expenses_found".localized)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: 100, alignment: .center)
     }
     
     
@@ -507,6 +465,24 @@ struct AnalyticsView: View {
     }
 }
 
+// MARK: - Card style
+
+private struct AnalyticsCard: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(
+                Color(.secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+    }
+}
+
+private extension View {
+    func cardStyle() -> some View { modifier(AnalyticsCard()) }
+}
+
 // MARK: - Supporting Views
 
 struct CategoryBudgetRow: View {
@@ -531,33 +507,28 @@ struct CategoryBudgetRow: View {
         return (category.name, category.iconSystemName)
     }
     
+    private var progressColor: Color {
+        if progress >= 1.0 { return .red }
+        if progress > 0.8 { return .orange }
+        return .green
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(categoryInfo.name, systemImage: categoryInfo.icon)
                     .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                
+
                 Spacer()
-                
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(CurrencyFormatter.format(spentAmount, currency: dataManager.user.currency)) / \(CurrencyFormatter.format(budget.amount, currency: dataManager.user.currency))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    
-                    Text("\(Int(progress * 100))%")
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                        .foregroundStyle(progress > 0.8 ? .red : .primary)
-                }
+
+                Text("\(CurrencyFormatter.format(spentAmount, currency: dataManager.user.currency)) / \(CurrencyFormatter.format(budget.amount, currency: dataManager.user.currency))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            
+
             ProgressView(value: progress)
-                .progressViewStyle(LinearProgressViewStyle(tint: progress > 1.0 ? .red : progress > 0.8 ? .orange : .green))
-                .scaleEffect(x: 1, y: 1.5, anchor: .center)
+                .tint(progressColor)
         }
-        .padding(.vertical, 8)
     }
 }
 

@@ -20,57 +20,20 @@ struct AddRecurringExpenseView: View {
                 Section("expense_details".localized) {
                     TextField("title".localized, text: $title)
                         .textInputAutocapitalization(.words)
-                    
+
                     HStack {
                         Text("amount".localized)
                         Spacer()
-                        TextField("0.00", text: $amount)
+                        Text(dataManager.user.currency.symbol)
+                            .foregroundStyle(.secondary)
+                        TextField("0", text: $amount)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 140)
                     }
-                    
-                    // Category Selection
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Text("category".localized)
-                            Spacer()
-                            Menu {
-                                // User Categories
-                                ForEach(dataManager.userCategories) { userCategory in
-                                    Button(action: {
-                                        selectedCategory = userCategory
-                                    }) {
-                                        Label {
-                                            Text(userCategory.name)
-                                        } icon: {
-                                            Image(systemName: userCategory.iconSystemName)
-                                        }
-                                    }
-                                }
-                                
-                                Divider()
-                                
-                                // Create New Category
-                                Button(action: { showingCategoryManagement = true }) {
-                                    Label("Create New Category", systemImage: "plus.circle")
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    if let userCat = selectedCategory {
-                                        Image(systemName: userCat.iconSystemName)
-                                            .foregroundStyle(userCat.color)
-                                        Text(userCat.name)
-                                            .foregroundStyle(.primary)
-                                    } else {
-                                        Text("Select Category")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
+
+                    RecurringCategoryPicker(selectedCategory: $selectedCategory) {
+                        showingCategoryManagement = true
                     }
                 }
                 
@@ -134,28 +97,24 @@ struct AddRecurringExpenseView: View {
     }
     
     private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !amount.isEmpty &&
-        Double(amount) != nil &&
-        Double(amount)! > 0 &&
-        selectedCategory != nil
+        guard let value = Double(amount), value > 0 else { return false }
+        return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && selectedCategory != nil
     }
-    
+
     private func saveRecurringExpense() {
-        guard let amountValue = Double(amount) else { return }
-        
-        let recurringExpense = RecurringExpense(
+        guard let amountValue = Double(amount), let categoryId = selectedCategory?.id else { return }
+
+        var newRecurring = RecurringExpense(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             amount: amountValue,
-            categoryId: selectedCategory?.id ?? DataManager.shared.resolveCategory(id: UUID()).id,
+            categoryId: categoryId,
             recurrenceType: selectedRecurrence,
             startDate: startDate,
             endDate: hasEndDate ? endDate : nil
         )
-        
-        var newRecurring = recurringExpense
         newRecurring.isActive = isActive
-        
+
         dataManager.addRecurringExpense(newRecurring)
         dismiss()
     }
@@ -182,57 +141,20 @@ struct EditRecurringExpenseView: View {
                 Section("expense_details".localized) {
                     TextField("title".localized, text: $title)
                         .textInputAutocapitalization(.words)
-                    
+
                     HStack {
                         Text("amount".localized)
                         Spacer()
-                        TextField("0.00", text: $amount)
+                        Text(dataManager.user.currency.symbol)
+                            .foregroundStyle(.secondary)
+                        TextField("0", text: $amount)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 140)
                     }
-                    
-                    // Category Selection
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Text("category".localized)
-                            Spacer()
-                            Menu {
-                                // User Categories
-                                ForEach(dataManager.userCategories) { userCategory in
-                                    Button(action: {
-                                        selectedCategory = userCategory
-                                    }) {
-                                        Label {
-                                            Text(userCategory.name)
-                                        } icon: {
-                                            Image(systemName: userCategory.iconSystemName)
-                                        }
-                                    }
-                                }
-                                
-                                Divider()
-                                
-                                // Create New Category
-                                Button(action: { showingCategoryManagement = true }) {
-                                    Label("Create New Category", systemImage: "plus.circle")
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    if let userCat = selectedCategory {
-                                        Image(systemName: userCat.iconSystemName)
-                                            .foregroundStyle(userCat.color)
-                                        Text(userCat.name)
-                                            .foregroundStyle(.primary)
-                                    } else {
-                                        Text("Select Category")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
+
+                    RecurringCategoryPicker(selectedCategory: $selectedCategory) {
+                        showingCategoryManagement = true
                     }
                 }
                 
@@ -343,6 +265,49 @@ struct EditRecurringExpenseView: View {
         
         dataManager.updateRecurringExpense(updatedExpense)
         dismiss()
+    }
+}
+
+// MARK: - Shared Category Picker
+
+struct RecurringCategoryPicker: View {
+    @Binding var selectedCategory: UserCategory?
+    var onCreateNew: () -> Void
+    @ObservedObject private var dataManager = DataManager.shared
+
+    var body: some View {
+        HStack {
+            Text("category".localized)
+            Spacer()
+            Menu {
+                ForEach(dataManager.userCategories) { category in
+                    Button {
+                        selectedCategory = category
+                    } label: {
+                        Label(category.name, systemImage: category.iconSystemName)
+                    }
+                }
+                Divider()
+                Button(action: onCreateNew) {
+                    Label("create_new_category".localized, systemImage: "plus.circle")
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    if let category = selectedCategory {
+                        Image(systemName: category.iconSystemName)
+                            .foregroundStyle(category.color)
+                        Text(category.name)
+                            .foregroundStyle(.primary)
+                    } else {
+                        Text("select_category".localized)
+                            .foregroundStyle(.secondary)
+                    }
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
     }
 }
 
