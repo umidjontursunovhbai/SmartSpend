@@ -5,29 +5,26 @@ struct DashboardView: View {
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var tabManager = TabManager.shared
     @State private var showingAddExpense = false
-    @State private var showingCustomMonthPicker = false
-    
+
+    private let calendar = Calendar.current
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    budgetOverviewSection
-
-                    categoryBreakdownSection
-
-                    spendingTrendsSection
-
-                    spendingGoalsSection
+                    remainingBudgetCard
+                    quickStatsCard
+                    if !upcomingBills.isEmpty { upcomingBillsCard }
+                    if !budgetAlerts.isEmpty { budgetAlertsCard }
+                    recentExpensesCard
+                    if !dataManager.spendingGoals.isEmpty {
+                        SpendingGoalsView(goals: dataManager.spendingGoals)
+                    }
                 }
                 .padding(.horizontal)
-                .padding(.bottom)
+                .padding(.vertical)
             }
             .background(Color(.systemGroupedBackground))
-            .safeAreaInset(edge: .top) {
-                periodSelector
-                    .padding(.vertical, 8)
-                    .background(.regularMaterial)
-            }
             .navigationTitle("smartspend".localized)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -43,103 +40,259 @@ struct DashboardView: View {
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView()
             }
-            .sheet(isPresented: $showingCustomMonthPicker) {
-                customMonthPickerSheet
-            }
-            .onTapGesture {
-                DeleteButtonManager.shared.setActiveExpense(nil)
-            }
         }
     }
 
-    // MARK: - Period selector
+    private var currency: Currency { dataManager.user.currency }
 
-    private var customPillTitle: String {
-        guard dataManager.selectedTimePeriod == .customMonth else { return "custom_date_range".localized }
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        return "\(f.string(from: dataManager.customStartDate)) – \(f.string(from: dataManager.customEndDate))"
+    // MARK: - Derived data
+
+    private var monthExpenses: [Expense] {
+        dataManager.expenses.filter { calendar.isDate($0.date, equalTo: Date(), toGranularity: .month) }
+    }
+    private var monthTotal: Double { monthExpenses.reduce(0) { $0 + $1.amount } }
+    private var monthlySalary: Double { dataManager.getCurrentMonthSalary() }
+    private var remaining: Double { monthlySalary - monthTotal }
+    private var budgetProgress: Double { monthlySalary > 0 ? min(monthTotal / monthlySalary, 1) : 0 }
+
+    private var daysRemainingInMonth: Int {
+        let total = calendar.range(of: .day, in: .month, for: Date())?.count ?? 30
+        let day = calendar.component(.day, from: Date())
+        return max(total - day + 1, 1)
+    }
+    private var dailyAllowance: Double { max(remaining, 0) / Double(daysRemainingInMonth) }
+
+    private var todayTotal: Double { dataManager.getTodaysExpensesTotal() }
+    private var todayCount: Int { dataManager.getTodaysExpenses().count }
+
+    private var weekTotal: Double {
+        guard let start = calendar.dateInterval(of: .weekOfYear, for: Date())?.start else { return 0 }
+        return dataManager.expenses.filter { $0.date >= start }.reduce(0) { $0 + $1.amount }
     }
 
-    private var periodSelector: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach([TimePeriod.today, .thisWeek, .currentMonth, .lastMonth, .all], id: \.self) { period in
-                    periodPill(title: period.localizedName,
-                               isSelected: dataManager.selectedTimePeriod == period) {
-                        dataManager.selectedTimePeriod = period
+    private var recentExpenses: [Expense] {
+        Array(dataManager.expenses.sorted { $0.date > $1.date }.prefix(5))
+    }
+
+    private var upcomingBills: [RecurringExpense] {
+        let now = calendar.startOfDay(for: Date())
+        let limit = calendar.date(byAdding: .day, value: 7, to: now) ?? now
+        return dataManager.recurringExpenses
+            .filter { $0.isActive && $0.nextDueDate >= now && $0.nextDueDate <= limit }
+            .sorted { $0.nextDueDate < $1.nextDueDate }
+    }
+
+    private var budgetAlerts: [(category: UserCategory, spent: Double, limit: Double)] {
+        dataManager.categoryBudgets
+            .filter { $0.isEnabled && $0.amount > 0 }
+            .compactMap { budget -> (category: UserCategory, spent: Double, limit: Double)? in
+                let spent = monthExpenses
+                    .filter { $0.categoryId == budget.categoryId }
+                    .reduce(0) { $0 + $1.amount }
+                guard spent > budget.amount * 0.8 else { return nil }
+                return (dataManager.resolveCategory(id: budget.categoryId), spent, budget.amount)
+            }
+            .sorted { ($0.spent / $0.limit) > ($1.spent / $1.limit) }
+    }
+
+    // MARK: - Cards
+
+    private var remainingBudgetCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("remaining_this_month".localized.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            if monthlySalary > 0 {
+                Text(CurrencyFormatter.format(remaining, currency: currency))
+                    .font(.system(size: 36, weight: .semibold, design: .rounded))
+                    .foregroundStyle(remaining < 0 ? .red : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+
+                ProgressView(value: budgetProgress)
+                    .tint(budgetProgress > 0.8 ? Color.red : Color.accentColor)
+
+                if remaining > 0 {
+                    Label(
+                        String(format: "spend_per_day_format".localized,
+                               CurrencyFormatter.format(dailyAllowance, currency: currency)),
+                        systemImage: "calendar.day.timeline.left"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("income_not_set".localized)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button("set_income".localized) { tabManager.selectedTab = 4 }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+        }
+        .dashboardCard()
+    }
+
+    private var quickStatsCard: some View {
+        HStack(spacing: 0) {
+            statColumn(
+                label: "today".localized,
+                value: CurrencyFormatter.format(todayTotal, currency: currency),
+                sub: todayCount == 1 ? "one_transaction".localized
+                                     : String(format: "transactions_count_format".localized, todayCount)
+            )
+            Divider().frame(height: 42)
+            statColumn(label: "this_week".localized,
+                       value: CurrencyFormatter.format(weekTotal, currency: currency), sub: nil)
+            Divider().frame(height: 42)
+            statColumn(label: "time_period_this_month".localized,
+                       value: CurrencyFormatter.format(monthTotal, currency: currency), sub: nil)
+        }
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func statColumn(label: String, value: String, sub: String?) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.headline)
+                .fontDesign(.rounded)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let sub {
+                Text(sub).font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 6)
+    }
+
+    private var upcomingBillsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("upcoming_bills".localized)
+            VStack(spacing: 0) {
+                ForEach(Array(upcomingBills.enumerated()), id: \.element.id) { index, bill in
+                    let cat = dataManager.resolveCategory(id: bill.categoryId)
+                    HStack(spacing: 12) {
+                        Image(systemName: cat.iconSystemName).foregroundStyle(cat.color).frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(bill.title).lineLimit(1)
+                            Text(dueText(bill.nextDueDate))
+                                .font(.caption)
+                                .foregroundStyle(dueColor(bill.nextDueDate))
+                        }
+                        Spacer()
+                        Text(CurrencyFormatter.format(bill.amount, currency: currency)).fontWeight(.medium)
+                    }
+                    .padding(.vertical, 8)
+                    if index < upcomingBills.count - 1 { Divider() }
+                }
+            }
+        }
+        .dashboardCard()
+    }
+
+    private var budgetAlertsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("budget_alerts".localized)
+            VStack(spacing: 0) {
+                ForEach(Array(budgetAlerts.enumerated()), id: \.offset) { index, alert in
+                    let over = alert.spent > alert.limit
+                    HStack(spacing: 12) {
+                        Image(systemName: alert.category.iconSystemName)
+                            .foregroundStyle(alert.category.color).frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(alert.category.name)
+                            Text("\(CurrencyFormatter.format(alert.spent, currency: currency)) / \(CurrencyFormatter.format(alert.limit, currency: currency))")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(over ? "over_budget".localized : "near_limit".localized)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(over ? .red : .orange)
+                    }
+                    .padding(.vertical, 8)
+                    if index < budgetAlerts.count - 1 { Divider() }
+                }
+            }
+        }
+        .dashboardCard()
+    }
+
+    private var recentExpensesCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("recent_expenses".localized,
+                       actionTitle: recentExpenses.isEmpty ? nil : "view_all".localized) {
+                tabManager.switchToExpensesTab()
+            }
+            if recentExpenses.isEmpty {
+                Text("no_expenses_yet".localized)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(recentExpenses.enumerated()), id: \.element.id) { index, expense in
+                        let cat = dataManager.resolveCategory(id: expense.categoryId)
+                        HStack(spacing: 12) {
+                            Image(systemName: cat.iconSystemName).foregroundStyle(cat.color).frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(expense.title.isEmpty ? cat.name : expense.title).lineLimit(1)
+                                Text(expense.date.formatted(date: .abbreviated, time: .omitted))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(CurrencyFormatter.format(expense.amount, currency: currency)).fontWeight(.medium)
+                        }
+                        .padding(.vertical, 8)
+                        if index < recentExpenses.count - 1 { Divider() }
                     }
                 }
-                periodPill(title: customPillTitle,
-                           icon: "calendar",
-                           isSelected: dataManager.selectedTimePeriod == .customMonth) {
-                    showingCustomMonthPicker = true
-                }
             }
-            .padding(.horizontal, 16)
         }
+        .dashboardCard()
     }
 
-    private func periodPill(title: String, icon: String? = nil, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                if let icon { Image(systemName: icon).font(.caption2) }
-                Text(title).font(.subheadline.weight(.medium))
+    // MARK: - Helpers
+
+    private func cardHeader(_ title: String, actionTitle: String? = nil, action: (() -> Void)? = nil) -> some View {
+        HStack {
+            Text(title).font(.headline)
+            Spacer()
+            if let actionTitle, let action {
+                Button(actionTitle, action: action).font(.subheadline)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(isSelected ? Color.accentColor : Color(.systemGray5), in: Capsule())
-            .foregroundStyle(isSelected ? .white : .primary)
-        }
-        .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
-    }
-
-    // MARK: - Extracted Subviews
-
-    private var budgetOverviewSection: some View {
-        BudgetOverviewView(
-            totalExpenses: dataManager.getTotalExpensesForPeriod(),
-            remainingBudget: dataManager.getRemainingBudgetForPeriod(),
-            salary: dataManager.getCurrentSalaryForPeriod(),
-            currency: dataManager.user.currency
-        )
-    }
-
-    private var categoryBreakdownSection: some View {
-        CategoryBreakdownView(
-            breakdown: dataManager.getCategoryBreakdownForPeriod()
-        )
-    }
-
-    private var spendingTrendsSection: some View {
-        SpendingTrendsView()
-    }
-
-    @ViewBuilder
-    private var spendingGoalsSection: some View {
-        if !dataManager.spendingGoals.isEmpty {
-            SpendingGoalsView(goals: dataManager.spendingGoals)
         }
     }
-    
-    private var customMonthPickerSheet: some View {
-        CalendarPickerView(
-            selectedStartDate: Binding(
-                get: { dataManager.customStartDate },
-                set: { dataManager.customStartDate = $0 }
-            ),
-            selectedEndDate: Binding(
-                get: { dataManager.customEndDate },
-                set: { dataManager.customEndDate = $0 }
-            ),
-            isDateRangeMode: .constant(true),
-            selectedTimePeriod: Binding(
-                get: { .customMonth },
-                set: { _ in dataManager.selectedTimePeriod = .customMonth }
+
+    private func dueText(_ date: Date) -> String {
+        if calendar.isDateInToday(date) { return "due_today".localized }
+        if calendar.isDateInTomorrow(date) { return "due_tomorrow".localized }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()),
+                                           to: calendar.startOfDay(for: date)).day ?? 0
+        return String(format: "due_in_days_format".localized, days)
+    }
+
+    private func dueColor(_ date: Date) -> Color {
+        (calendar.isDateInToday(date) || calendar.isDateInTomorrow(date)) ? .orange : .secondary
+    }
+}
+
+private extension View {
+    func dashboardCard() -> some View {
+        self
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(
+                Color(.secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
-        )
-        .presentationDetents([.fraction(0.85)])
     }
 }
 
