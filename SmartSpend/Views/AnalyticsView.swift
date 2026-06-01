@@ -57,47 +57,87 @@ struct AnalyticsView: View {
     }
     
     private var timeFramePicker: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("time_period".localized)
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            Picker("Time Frame", selection: $selectedTimeframe) {
-                ForEach(TimeFrame.allCases, id: \.self) { timeFrame in
-                    Text(timeFrame.localizedName).tag(timeFrame)
-                }
+        Picker("Time Frame", selection: $selectedTimeframe) {
+            ForEach(TimeFrame.allCases, id: \.self) { timeFrame in
+                Text(timeFrame.localizedName).tag(timeFrame)
             }
-            .pickerStyle(.segmented)
         }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 16)
+        .pickerStyle(.segmented)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
-    
+
     private var spendingHighlights: some View {
-        HStack(spacing: 12) {
-            highlightCard(title: "spent".localized, value: CurrencyFormatter.format(currentPeriodTotal, currency: dataManager.user.currency), icon: "banknote.fill", color: .blue)
-            highlightCard(title: "daily_avg".localized, value: CurrencyFormatter.format(averageDailySpend, currency: dataManager.user.currency), icon: "chart.line.uptrend.xyaxis", color: .purple)
+        VStack(spacing: 12) {
+            // Hero card — primary metric
+            VStack(alignment: .leading, spacing: 8) {
+                Label("spent".localized, systemImage: "banknote.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text(CurrencyFormatter.format(currentPeriodTotal, currency: dataManager.user.currency))
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                if previousPeriodTotal > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: spendingChangePercentage >= 0 ? "arrow.up.right" : "arrow.down.right")
+                            .font(.caption.bold())
+                        Text(trendSummary)
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(.white.opacity(0.15), in: Capsule())
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+            .background(
+                LinearGradient(
+                    colors: [Color(.systemBlue), Color(.systemIndigo)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            )
+
+            // Secondary stats row
+            HStack(spacing: 12) {
+                miniHighlightCard(
+                    title: "daily_avg".localized,
+                    value: CurrencyFormatter.format(averageDailySpend, currency: dataManager.user.currency),
+                    icon: "chart.line.uptrend.xyaxis",
+                    color: .purple
+                )
+                miniHighlightCard(
+                    title: "Transactions",
+                    value: "\(expensesCount)",
+                    icon: "list.bullet.rectangle.portrait.fill",
+                    color: .teal
+                )
+            }
         }
     }
-    
-    private func highlightCard(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+
+    private func miniHighlightCard(title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
                 .frame(width: 36, height: 36)
-                .background(color.opacity(0.1), in: Circle())
-            
-            VStack(alignment: .leading, spacing: 4) {
+                .background(color.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.caption)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                    .fontWeight(.medium)
                 Text(value)
-                    .font(.subheadline)
-                    .fontWeight(.bold)
+                    .font(.subheadline.bold())
                     .fontDesign(.rounded)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

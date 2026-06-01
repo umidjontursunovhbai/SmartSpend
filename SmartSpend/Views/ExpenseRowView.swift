@@ -4,20 +4,18 @@ struct ExpenseRowView: View {
     let expense: Expense
     @ObservedObject private var dataManager = DataManager.shared
     @State private var showingEditExpense = false
-    @State private var isPressed = false
     @Binding var isSelectionMode: Bool
     @Binding var selectedExpenses: Set<UUID>
-    
+
     private var isSelected: Bool {
         selectedExpenses.contains(expense.id)
     }
-    
-    // Helper to resolve the correct category display info
+
     private var categoryDisplayInfo: (name: String, icon: String, color: Color) {
         let category = dataManager.resolveCategory(id: expense.categoryId)
         return (category.name, category.iconSystemName, category.color)
     }
-    
+
     var body: some View {
         Button(action: {
             if isSelectionMode {
@@ -26,90 +24,58 @@ struct ExpenseRowView: View {
                 showingEditExpense = true
             }
         }) {
-            HStack(spacing: 12) {
-                // Selection Checkbox (shown in selection mode)
+            HStack(spacing: 14) {
                 if isSelectionMode {
                     ZStack {
                         Circle()
                             .stroke(isSelected ? categoryDisplayInfo.color : Color(.systemGray3), lineWidth: 2)
                             .frame(width: 24, height: 24)
-                        
                         if isSelected {
                             Circle()
                                 .fill(categoryDisplayInfo.color)
                                 .frame(width: 24, height: 24)
-                            
                             Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.white)
                         }
                     }
-                    .padding(.leading, 16)
-                    .padding(.trailing, 4)
                     .transition(.scale.combined(with: .opacity))
                 }
-                
-                HStack(spacing: 0) {
-                    // Category Color Bar
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(categoryDisplayInfo.color)
-                        .frame(width: 4)
-                        .padding(.vertical, 4)
-                    
-                    HStack(spacing: 12) {
-                        // Category Icon
-                        Image(systemName: categoryDisplayInfo.icon)
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(categoryDisplayInfo.color)
-                            .frame(width: 40, height: 40)
-                        
-                        // Expense Details
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(expense.title)
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            
-                            Text(formatDate(expense.date))
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                        }
-                        
-                        Spacer(minLength: 12)
-                        
-                        // Amount
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(formatCurrency(expense.amount, dataManager.user.currency))
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(.primary)
-                            
-                            Text(categoryDisplayInfo.name)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                        }
-                    }
-                    .padding(.leading, 12)
-                    .padding(.trailing, 16)
-                    .padding(.vertical, 12)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(categoryDisplayInfo.color.gradient)
+                        .frame(width: 46, height: 46)
+                    Image(systemName: categoryDisplayInfo.icon)
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(.white)
                 }
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(isSelected ? categoryDisplayInfo.color : Color.clear, lineWidth: 2)
-                )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(expense.title.isEmpty ? "Unnamed" : expense.title)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(categoryDisplayInfo.name)
+                        .font(.system(size: 13))
+                        .foregroundStyle(categoryDisplayInfo.color)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(formatCurrency(expense.amount, dataManager.user.currency))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
             }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressEffectButtonStyle())
-        .listRowInsets(EdgeInsets(top: 5, leading: isSelectionMode ? 0 : 16, bottom: 5, trailing: 16))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 4, leading: isSelectionMode ? 8 : 16, bottom: 4, trailing: 16))
         .contextMenu {
             Button(action: { showingEditExpense = true }) {
                 Label("Edit", systemImage: "pencil")
             }
-            
             Button(role: .destructive, action: {
                 withAnimation {
                     dataManager.moveToDeletedExpenses(expense)
@@ -122,7 +88,7 @@ struct ExpenseRowView: View {
             EditExpenseView(expense: expense)
         }
     }
-    
+
     private func toggleSelection() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             if isSelected {
@@ -132,28 +98,12 @@ struct ExpenseRowView: View {
             }
         }
     }
-    
-    private func formatDate(_ date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            return "Today"
-        } else if calendar.isDateInYesterday(date) {
-            return "Yesterday"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .none
-            formatter.doesRelativeDateFormatting = true
-            return formatter.string(from: date)
-        }
-    }
-    
+
     private func formatCurrency(_ amount: Double, _ currency: Currency) -> String {
         return CurrencyFormatter.format(amount, currency: currency)
     }
 }
 
-// MARK: - 3D Press Effect Button Style
 struct PressEffectButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -162,4 +112,3 @@ struct PressEffectButtonStyle: ButtonStyle {
             .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
-

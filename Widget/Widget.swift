@@ -4,7 +4,7 @@ import AppIntents
 
 // MARK: - Lightweight mirror types for decoding app data
 
-private let appGroupID = "group.muydinov.SmartSpend"
+private let appGroupID = "group.com.tursunov.SmartSpend"
 
 private struct WExpense: Codable {
     let amount: Double

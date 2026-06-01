@@ -49,7 +49,7 @@ class DataManager: ObservableObject {
     @Published var customStartDate: Date = Date()
     @Published var customEndDate: Date = Date()
 
-    private let sharedDefaults = UserDefaults(suiteName: "group.muydinov.SmartSpend") ?? UserDefaults.standard
+    private let sharedDefaults = UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? UserDefaults.standard
 
     private init() {
         self.user = User(currency: .usd, language: .english)
@@ -176,7 +176,13 @@ class DataManager: ObservableObject {
             }
         }
     }
-    
+
+    func addExpensesBatch(_ newExpenses: [Expense]) {
+        expenses.append(contentsOf: newExpenses)
+        saveData()
+        rebuildLearnedPatternsFromRecentExpenses()
+    }
+
     private func addExpenseInternal(_ expense: Expense) {
         expenses.append(expense)
         saveData()
@@ -955,16 +961,24 @@ class DataManager: ObservableObject {
     
     func getDailyAverageForPeriod() -> Double {
         let filteredExpenses = getFilteredExpenses()
+        guard !filteredExpenses.isEmpty else { return 0 }
         let total = filteredExpenses.reduce(0) { $0 + $1.amount }
-        let days = max(1, Double(filteredExpenses.count))
-        return total / days
+        // Average per distinct calendar day that has spending.
+        let calendar = Calendar.current
+        let distinctDays = Set(filteredExpenses.map { calendar.startOfDay(for: $0.date) }).count
+        return total / Double(max(1, distinctDays))
     }
-    
+
     func getWeeklyAverageForPeriod() -> Double {
         let filteredExpenses = getFilteredExpenses()
+        guard !filteredExpenses.isEmpty else { return 0 }
         let total = filteredExpenses.reduce(0) { $0 + $1.amount }
-        let weeks = max(1, Double(filteredExpenses.count) / 7.0)
-        return total / weeks
+        // Average per distinct calendar week that has spending.
+        let calendar = Calendar.current
+        let distinctWeeks = Set(filteredExpenses.map { expense -> DateComponents in
+            calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: expense.date)
+        }).count
+        return total / Double(max(1, distinctWeeks))
     }
     
     func getProgressPercentageForPeriod() -> Double {

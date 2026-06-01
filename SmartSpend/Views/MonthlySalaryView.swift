@@ -6,144 +6,196 @@ struct MonthlySalaryView: View {
     @State private var selectedYear: Int
     @State private var selectedMonth: Int
     @State private var salaryAmount: String = ""
-    
+
+    private static let monthYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMMM yyyy"
+        return f
+    }()
+
     init(year: Int? = nil, month: Int? = nil) {
-        let calendar = Calendar.current
+        let cal = Calendar.current
         let now = Date()
-        let currentYear = calendar.component(.year, from: now)
-        let currentMonth = calendar.component(.month, from: now)
-        
-        _selectedYear = State(initialValue: year ?? currentYear)
-        _selectedMonth = State(initialValue: month ?? currentMonth)
+        _selectedYear  = State(initialValue: year  ?? cal.component(.year,  from: now))
+        _selectedMonth = State(initialValue: month ?? cal.component(.month, from: now))
     }
-    
+
+    // MARK: - Computed
+
+    private var monthYearLabel: String {
+        var c = DateComponents()
+        c.year = selectedYear; c.month = selectedMonth; c.day = 1
+        guard let date = Calendar.current.date(from: c) else { return "" }
+        return Self.monthYearFormatter.string(from: date)
+    }
+
+    private var displayAmount: String {
+        salaryAmount.isEmpty ? "0" : salaryAmount
+    }
+
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("month_year".localized) {
-                    HStack(spacing: 0) {
-                        Picker("month".localized, selection: $selectedMonth) {
-                            ForEach(1...12, id: \.self) { month in
-                                Text(monthName(month))
-                                    .font(.title3)
-                                    .tag(month)
-                            }
-                        }
-                        .pickerStyle(.wheel)
-                        .frame(maxWidth: .infinity)
-                        
-                        Picker("year".localized, selection: $selectedYear) {
-                            ForEach(2000...2100, id: \.self) { year in
-                                Text(String(format: "%d", year))
-                                    .font(.title3)
-                                    .tag(year)
-                            }
-                        }
-                        .pickerStyle(.wheel)
-                        .frame(maxWidth: .infinity)
+            VStack(spacing: 0) {
+
+                // Month navigator
+                HStack {
+                    Button { stepMonth(by: -1) } label: {
+                        Image(systemName: "chevron.left")
+                            .fontWeight(.semibold)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .frame(height: 120)
-                }
-                .onChange(of: selectedMonth) {
-                    loadExistingSalary()
-                }
-                .onChange(of: selectedYear) {
-                    loadExistingSalary()
-                }
-                
-                Section("amount".localized) {
-                    HStack {
-                        Text(dataManager.user.currency.symbol)
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                        TextField("0", text: $salaryAmount)
-                            .font(.title2)
-                            .keyboardType(.decimalPad)
-                            .onChange(of: salaryAmount) {
-                                formatAmountInput()
-                            }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tint)
+
+                    Spacer()
+
+                    Text(monthYearLabel)
+                        .font(.headline)
+
+                    Spacer()
+
+                    Button { stepMonth(by: 1) } label: {
+                        Image(systemName: "chevron.right")
+                            .fontWeight(.semibold)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tint)
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+
+                Divider()
+
+                // Amount display
+                VStack(spacing: 4) {
+                    Text(dataManager.user.currency.rawValue)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(displayAmount)
+                        .font(.system(size: 48, weight: .light, design: .rounded))
+                        .foregroundStyle(salaryAmount.isEmpty ? .secondary : .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .padding(.horizontal)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+
+                Divider()
+
+                // Built-in number pad — no system keyboard, sheet never expands
+                SalaryNumberPad(amount: $salaryAmount)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
             }
             .navigationTitle("monthly_salary_title".localized)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("cancel".localized) {
-                        dismiss()
-                    }
+                    Button("cancel".localized) { dismiss() }
                 }
-                
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("save".localized) {
                         saveSalary()
                         dismiss()
                     }
-                    .disabled(salaryAmount.isEmpty || getNumericValue(from: salaryAmount) == nil)
+                    .fontWeight(.semibold)
+                    .disabled(salaryAmount.isEmpty || Double(salaryAmount) == nil)
                 }
             }
-            .onAppear {
-                loadExistingSalary()
-            }
+            .onAppear { loadExistingSalary() }
         }
     }
-    
-    private func monthName(_ month: Int) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMMM"
-        
-        var components = DateComponents()
-        components.year = 2024
-        components.month = month
-        components.day = 1
-        
-        if let date = Calendar.current.date(from: components) {
-            return dateFormatter.string(from: date)
-        }
-        return "Month \(month)"
+
+    // MARK: - Helpers
+
+    private func stepMonth(by delta: Int) {
+        var m = selectedMonth + delta
+        var y = selectedYear
+        if m > 12 { m = 1;  y += 1 }
+        if m < 1  { m = 12; y -= 1 }
+        selectedMonth = m
+        selectedYear  = y
+        loadExistingSalary()
     }
-    
-    private func getExistingSalary() -> Double? {
-        return dataManager.monthlySalaries.first { $0.year == selectedYear && $0.month == selectedMonth }?.amount
-    }
-    
+
     private func loadExistingSalary() {
-        if let existingSalary = getExistingSalary() {
-            salaryAmount = formatNumberWithCommas(existingSalary)
+        if let existing = dataManager.monthlySalaries.first(where: {
+            $0.year == selectedYear && $0.month == selectedMonth
+        }) {
+            salaryAmount = String(existing.amount)
         } else {
             salaryAmount = ""
         }
     }
-    
+
     private func saveSalary() {
-        guard let amount = getNumericValue(from: salaryAmount) else { return }
+        guard let amount = Double(salaryAmount) else { return }
         dataManager.setSalaryForMonth(year: selectedYear, month: selectedMonth, amount: amount)
     }
-    
-    private func formatAmountInput() {
-        // Remove all non-numeric characters except decimal point
-        let cleanedInput = salaryAmount.replacingOccurrences(of: "[^0-9.]", with: "", options: .regularExpression)
-        
-        // Convert to number and format with commas
-        if let number = Double(cleanedInput) {
-            let formatted = formatNumberWithCommas(number)
-            if formatted != salaryAmount {
-                salaryAmount = formatted
+}
+
+// MARK: - Number Pad
+
+private struct SalaryNumberPad: View {
+    @Binding var amount: String
+
+    private let rows: [[String]] = [
+        ["1", "2", "3"],
+        ["4", "5", "6"],
+        ["7", "8", "9"],
+        [".", "0",  "⌫"]
+    ]
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ForEach(rows, id: \.self) { row in
+                HStack(spacing: 8) {
+                    ForEach(row, id: \.self) { key in
+                        Button { tap(key) } label: {
+                            Group {
+                                if key == "⌫" {
+                                    Image(systemName: "delete.left")
+                                        .font(.title3)
+                                } else {
+                                    Text(key)
+                                        .font(.title2)
+                                        .fontWeight(.regular)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
     }
-    
-    private func formatNumberWithCommas(_ number: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 2
-        formatter.minimumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: number)) ?? ""
-    }
-    
-    private func getNumericValue(from text: String) -> Double? {
-        // Remove commas and convert to double
-        let cleanedText = text.replacingOccurrences(of: ",", with: "")
-        return Double(cleanedText)
+
+    private func tap(_ key: String) {
+        switch key {
+        case "⌫":
+            if !amount.isEmpty { amount.removeLast() }
+        case ".":
+            guard !amount.contains(".") else { return }
+            amount = amount.isEmpty ? "0." : amount + "."
+        default:
+            // Block leading zeros
+            if amount == "0" { amount = key; return }
+            // Limit to 2 decimal places
+            if let dot = amount.firstIndex(of: ".") {
+                let decimals = amount.distance(from: amount.index(after: dot), to: amount.endIndex)
+                guard decimals < 2 else { return }
+            }
+            amount += key
+        }
     }
 }

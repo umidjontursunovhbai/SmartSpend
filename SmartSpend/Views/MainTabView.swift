@@ -50,7 +50,7 @@ struct MainTabView: View {
     }
 
     private func checkAddExpenseIntent() {
-        let defaults = UserDefaults(suiteName: "group.muydinov.SmartSpend") ?? UserDefaults.standard
+        let defaults = UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? UserDefaults.standard
         guard defaults.bool(forKey: "openAddExpense") else { return }
         defaults.removeObject(forKey: "openAddExpense")
         showingAddExpense = true
@@ -138,16 +138,10 @@ struct SettingsView: View {
                         Label("categories".localized, systemImage: "tag.fill")
                             .foregroundStyle(Color(.systemOrange))
                     }
-                }
-                
-                // Section: Support
-                Section("support".localized) {
-                    Button(action: {
-                        showingSupportChat = true
-                    }) {
+                    Button(action: { showingSupportChat = true }) {
                         HStack {
-                            Label("ai_chat".localized, systemImage: "sparkles.tv.fill")
-                                .foregroundStyle(Color(.systemPurple))
+                            Label("Insights", systemImage: "chart.bar.doc.horizontal")
+                                .foregroundStyle(Color(.systemIndigo))
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.caption)
@@ -155,7 +149,10 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    
+                }
+
+                // Section: Support
+                Section("support".localized) {
                     Button(action: {
                         if let url = URL(string: "mailto:tursunov.umidjon.uz@gmail.com") {
                             UIApplication.shared.open(url)
@@ -251,6 +248,8 @@ struct SettingsView: View {
 
             .sheet(isPresented: $showingMonthlySalary) {
                 MonthlySalaryView()
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showingCurrencySelection) {
                 CurrencySelectionView()

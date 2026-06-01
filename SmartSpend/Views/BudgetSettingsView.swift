@@ -4,126 +4,80 @@ struct BudgetSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
     @State private var showingAddGoal = false
-    
+
     private var canSuggestBudgets: Bool {
-        // Allow suggestions if we have at least 10 expenses
-        return dataManager.expenses.count >= 10
+        dataManager.expenses.count >= 10
     }
-    
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Header Card
-                    VStack(spacing: 16) {
-                        Image(systemName: "sparkles.rectangle.stack.fill")
-                            .font(.system(size: 40))
-                            .foregroundStyle(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .padding(.top, 8)
-                        
-                        Text("budgets".localized)
-                            .font(.title2.bold())
-                        
-                        Text("Set monthly spending limits and track your financial goals to master your money.")
-                            .font(.subheadline)
+            List {
+                // Category budgets
+                Section("budget_goals".localized) {
+                    ForEach(dataManager.userCategories) { category in
+                        CategoryBudgetSettingRow(category: category)
+                    }
+                }
+
+                // Spending goals
+                Section {
+                    if dataManager.spendingGoals.isEmpty {
+                        Text("No goals yet")
                             .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                        
-                        HStack(spacing: 12) {
-                            Button(action: suggestBudgets) {
-                                Label("Suggest", systemImage: "sparkles")
-                                    .fontWeight(.medium)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!canSuggestBudgets)
-                            
-                            Button(action: resetAllBudgets) {
-                                Label("Reset", systemImage: "arrow.counterclockwise")
-                                    .fontWeight(.medium)
-                            }
-                            .buttonStyle(.bordered)
-                            .foregroundStyle(.red)
+                    } else {
+                        ForEach(dataManager.spendingGoals) { goal in
+                            SpendingGoalRow(goal: goal, onDelete: {
+                                dataManager.spendingGoals.removeAll { $0.id == goal.id }
+                                dataManager.saveSpendingGoals()
+                            })
                         }
-                        .padding(.top, 8)
+                        .onDelete(perform: deleteGoal)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
-                    
-                    // Category Budgets Section
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Text("Monthly Category Budgets")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                            Spacer()
-                        }
-                        
-                        LazyVStack(spacing: 12) {
-                            ForEach(dataManager.userCategories) { category in
-                                CategoryBudgetSettingRow(category: category)
-                            }
-                        }
-                    }
-                    
-                    // Spending Goals Section
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Text("Spending Goals")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                            Spacer()
-                            Button(action: { showingAddGoal = true }) {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.title3)
-                            }
-                        }
-                        
-                        if dataManager.spendingGoals.isEmpty {
-                            VStack(spacing: 12) {
-                                Image(systemName: "target")
-                                    .font(.largeTitle)
-                                    .foregroundStyle(.tertiary)
-                                Text("No goals set yet")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Button("Add Your First Goal") {
-                                    showingAddGoal = true
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 32)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-                        } else {
-                            VStack(spacing: 12) {
-                                ForEach(dataManager.spendingGoals) { goal in
-                                    SpendingGoalRow(goal: goal)
-                                        .padding()
-                                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                                }
-                            }
+                } header: {
+                    HStack {
+                        Text("Spending Goals")
+                        Spacer()
+                        Button {
+                            showingAddGoal = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .fontWeight(.medium)
                         }
                     }
                 }
-                .padding()
+
+                // Actions
+                Section {
+                    Button(action: suggestBudgets) {
+                        Label("Suggest Budgets from History", systemImage: "sparkles")
+                    }
+                    .disabled(!canSuggestBudgets)
+
+                    Button(role: .destructive, action: resetAllBudgets) {
+                        Label("Reset All Budgets", systemImage: "arrow.counterclockwise")
+                    }
+                } footer: {
+                    if !canSuggestBudgets {
+                        Text("Add at least 10 expenses to unlock budget suggestions.")
+                    }
+                }
             }
-            .background(Color(.systemGroupedBackground))
+            .listStyle(.insetGrouped)
             .navigationTitle("Budget Settings")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         dataManager.saveBudgets()
                         dismiss()
                     }
-                    .fontWeight(.bold)
+                    .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $showingAddGoal) {
                 AddSpendingGoalView()
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .onAppear {
                 dataManager.updateSpendingGoalProgress()
@@ -196,58 +150,52 @@ struct CategoryBudgetSettingRow: View {
     @ObservedObject private var dataManager = DataManager.shared
     @State private var budgetAmount: String = ""
     @State private var isEnabled: Bool = false
-    
+
     private var budget: CategoryBudget? {
         dataManager.categoryBudgets.first { $0.categoryId == category.id }
     }
-    
+
+    private var currentMonthSpent: Double {
+        let calendar = Calendar.current
+        return dataManager.expenses.filter {
+            calendar.isDate($0.date, equalTo: Date(), toGranularity: .month) &&
+            $0.categoryId == category.id
+        }.reduce(0) { $0 + $1.amount }
+    }
+
+    private var isOverBudget: Bool {
+        guard let b = budget, b.isEnabled, b.amount > 0 else { return false }
+        return currentMonthSpent > b.amount
+    }
+
     var body: some View {
-        HStack(spacing: 16) {
-            // Icon & Name
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Image(systemName: category.iconSystemName)
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .background(category.color, in: RoundedRectangle(cornerRadius: 8))
-                    
-                    Text(category.name)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                }
-            }
-            
-            Spacer()
-            
-            // Amount Input or Toggle
-            if isEnabled {
-                HStack(spacing: 4) {
-                    Text(dataManager.user.currency.symbol)
+        HStack(spacing: 12) {
+            Image(systemName: category.iconSystemName)
+                .foregroundStyle(category.color)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.name)
+                if isEnabled && currentMonthSpent > 0 {
+                    Text(CurrencyFormatter.format(currentMonthSpent, currency: dataManager.user.currency))
                         .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.secondary)
-                    
-                    TextField("0", text: $budgetAmount)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .font(.system(.subheadline, design: .rounded))
-                        .fontWeight(.bold)
-                        .frame(width: 80)
-                        .onChange(of: budgetAmount) { _, _ in updateBudget() }
+                        .foregroundStyle(isOverBudget ? .red : .secondary)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color(.systemGray6), in: Capsule())
-                .transition(.move(edge: .trailing).combined(with: .opacity))
             }
-            
-            Toggle("", isOn: $isEnabled.animation(.spring()))
+
+            Spacer()
+
+            if isEnabled {
+                TextField("0", text: $budgetAmount)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 110)
+                    .onChange(of: budgetAmount) { _, _ in updateBudget() }
+            }
+
+            Toggle("", isOn: $isEnabled.animation())
                 .labelsHidden()
-                .toggleStyle(SwitchToggleStyle(tint: .green))
         }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .onAppear { updateLocalState() }
         .onChange(of: isEnabled) { _, _ in updateBudget() }
         .onChange(of: dataManager.categoryBudgets) { _, _ in updateLocalState() }
@@ -277,65 +225,48 @@ struct CategoryBudgetSettingRow: View {
 
 struct SpendingGoalRow: View {
     let goal: SpendingGoal
+    var onDelete: (() -> Void)? = nil
     @ObservedObject private var dataManager = DataManager.shared
     @State private var showingCompletionAlert = false
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(goal.title)
-                    .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                
                 Spacer()
-                
                 if goal.isCompleted {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
-                        .font(.title3)
                 }
-            }
-            
-            HStack {
-                Text("Target: \(CurrencyFormatter.format(goal.targetAmount, currency: dataManager.user.currency))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
-                Text("Due: \(goal.deadline, style: .date)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            
-            HStack {
-                Text("Saved: \(CurrencyFormatter.format(goal.currentAmount, currency: dataManager.user.currency))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
                 Text("\(Int(goal.progress * 100))%")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(goal.isCompleted ? .green : .blue)
+                    .font(.subheadline)
+                    .foregroundStyle(goal.isCompleted ? .green : .secondary)
             }
-            
+
             ProgressView(value: goal.progress)
-                .progressViewStyle(LinearProgressViewStyle(tint: goal.isCompleted ? .green : .blue))
-                .scaleEffect(x: 1, y: 1.5, anchor: .center)
+                .tint(goal.isCompleted ? Color.green : Color.accentColor)
+
+            HStack {
+                Text(CurrencyFormatter.format(goal.currentAmount, currency: dataManager.user.currency))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("of \(CurrencyFormatter.format(goal.targetAmount, currency: dataManager.user.currency)) · \(goal.deadline, style: .date)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .onChange(of: goal.progress) { _, newProgress in
             if newProgress >= 1.0 && !goal.isCompleted {
                 showingCompletionAlert = true
             }
         }
-        .alert("Goal Completed! 🎉", isPresented: $showingCompletionAlert) {
+        .alert("Goal Completed!", isPresented: $showingCompletionAlert) {
             Button("OK") { }
         } message: {
-            Text("Congratulations! You've reached your goal: \(goal.title)")
+            Text("You've reached your goal: \(goal.title)")
         }
     }
 }

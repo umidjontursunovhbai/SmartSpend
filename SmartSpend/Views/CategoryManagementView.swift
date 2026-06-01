@@ -3,14 +3,86 @@ import SwiftUI
 struct CategoryManagementView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
-    
-    @State private var name: String = ""
-    @State private var iconSystemName: String = "tag.fill"
-    @State private var selectedColorName: String = "systemBlue"
-    @State private var showValidationError: Bool = false
+
     @State private var editingCategory: UserCategory? = nil
-    @State private var showingEditor: Bool = false
-    
+    @State private var showingEditor = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if dataManager.userCategories.isEmpty {
+                    Text("No categories yet")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(dataManager.userCategories) { category in
+                        HStack(spacing: 12) {
+                            Image(systemName: category.iconSystemName)
+                                .foregroundStyle(category.color)
+                                .frame(width: 28)
+                            Text(category.name)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            editingCategory = category
+                            showingEditor = true
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                dataManager.deleteUserCategory(category)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                editingCategory = category
+                                showingEditor = true
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            .tint(.orange)
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("categories".localized)
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        editingCategory = nil
+                        showingEditor = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingEditor) {
+                CategoryEditorView(category: editingCategory)
+                    .presentationDetents([.large])
+            }
+        }
+    }
+}
+
+// MARK: - Editor
+
+struct CategoryEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var dataManager = DataManager.shared
+
+    let category: UserCategory?
+
+    @State private var name: String
+    @State private var iconSystemName: String
+    @State private var selectedColorName: String
+    @State private var showValidationError = false
+
     private let availableIcons = [
         "tag.fill", "cart.fill", "bag.fill", "creditcard.fill", "banknote.fill",
         "house.fill", "car.fill", "bus.fill", "tram.fill", "airplane",
@@ -25,69 +97,51 @@ struct CategoryManagementView: View {
         "pawprint.fill", "leaf.fill", "drop.fill", "flame.fill",
         "building.2.fill", "storefront.fill", "theatermasks.fill", "ticket.fill"
     ]
-    
+
+    init(category: UserCategory?) {
+        self.category = category
+        _name             = State(initialValue: category?.name ?? "")
+        _iconSystemName   = State(initialValue: category?.iconSystemName ?? "tag.fill")
+        _selectedColorName = State(initialValue: category?.colorName ?? "systemBlue")
+    }
+
+    private var selectedColor: Color { color(for: selectedColorName) }
+    private var isEditing: Bool { category != nil }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 20) {
-                    // Create New Category Button
-                    Button(action: {
-                        editingCategory = nil
-                        resetForm()
-                        showingEditor = true
-                    }) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.white)
-                                .frame(width: 44, height: 44)
-                                .background(Color.accentColor, in: Circle())
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Create New Category")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                                Text("Add a custom category for your expenses")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(16)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Your Custom Categories
-                    if !dataManager.userCategories.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(dataManager.userCategories) { category in
-                                customCategoryRow(category)
-                            }
-                        }
-                    } else {
-                        ContentUnavailableView("No Categories", systemImage: "tag.slash", description: Text("Create a category to get started"))
-                    }
+            Form {
+                // Name
+                Section {
+                    TextField("Category name", text: $name)
+                        .textInputAutocapitalization(.words)
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 16)
+
+                // Icon
+                Section("Icon") {
+                    iconGrid
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                }
+
+                // Color
+                Section("Color") {
+                    colorGrid
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                }
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Categories")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle(isEditing ? "Edit Category" : "New Category")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .fontWeight(.medium)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("cancel".localized) { dismiss() }
                 }
-            }
-            .sheet(isPresented: $showingEditor) {
-                categoryEditorSheet
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(isEditing ? "save".localized : "add".localized) {
+                        saveCategory()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
             .alert("Invalid Name", isPresented: $showValidationError) {
                 Button("OK", role: .cancel) { }
@@ -96,241 +150,94 @@ struct CategoryManagementView: View {
             }
         }
     }
-    
-    // MARK: - Custom Category Row
-    
-    private func customCategoryRow(_ category: UserCategory) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: category.iconSystemName)
-                .font(.title2)
-                .foregroundStyle(category.color)
-                .frame(width: 44, height: 44)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(category.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Text("Created \(category.createdAt.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Spacer()
-            
-            Menu {
-                Button(action: {
-                    editingCategory = category
-                    name = category.name
-                    iconSystemName = category.iconSystemName
-                    selectedColorName = category.colorName
-                    showingEditor = true
-                }) {
-                    Label("Edit", systemImage: "pencil")
-                }
-                
-                Button(role: .destructive, action: {
-                    dataManager.deleteUserCategory(category)
-                }) {
-                    Label("Delete", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-    }
-    
-    // MARK: - Category Editor Sheet
-    
-    private var categoryEditorSheet: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Preview
-                    VStack(spacing: 12) {
-                        Image(systemName: iconSystemName)
-                            .font(.system(size: 50))
-                            .foregroundStyle(color(for: selectedColorName))
-                            .frame(width: 80, height: 80)
-                        
-                        Text(name.isEmpty ? "Category Name" : name)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(name.isEmpty ? .secondary : .primary)
-                    }
-                    .padding(.top, 8)
-                    
-                    // Name Input
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Name")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                        
-                        TextField("Enter category name", text: $name)
-                            .textFieldStyle(.plain)
-                            .padding(12)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-                            .textInputAutocapitalization(.words)
-                    }
-                    .padding(.horizontal)
-                    
-                    // Icon Selection
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Icon")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal)
-                        
-                        iconGrid
-                            .padding(.horizontal)
-                    }
-                    
-                    // Color Selection
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Color")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal)
-                        
-                        colorGrid
-                            .padding(.horizontal)
-                    }
-                }
-                .padding(.vertical)
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle(editingCategory != nil ? "Edit Category" : "New Category")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        showingEditor = false
-                    }
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(editingCategory != nil ? "Save" : "Add") {
-                        saveCategory()
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-    }
-    
-    private var colorGrid: some View {
-        let columns = [GridItem(.adaptive(minimum: 40), spacing: 12)]
-        return LazyVGrid(columns: columns, spacing: 12) {
-            ForEach(UserCategory.presetColors, id: \.self) { colorName in
-                let isSelected = selectedColorName == colorName
-                Circle()
-                    .fill(color(for: colorName))
-                    .frame(width: 36, height: 36)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white, lineWidth: isSelected ? 3 : 0)
-                            .padding(3)
-                    )
-                    .overlay(
-                        Image(systemName: "checkmark")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white)
-                            .opacity(isSelected ? 1 : 0)
-                    )
-                    .onTapGesture { selectedColorName = colorName }
-            }
-        }
-    }
-    
+
+    // MARK: - Grids
+
     private var iconGrid: some View {
-        let columns = [GridItem(.adaptive(minimum: 48), spacing: 8)]
+        let columns = [GridItem(.adaptive(minimum: 44), spacing: 8)]
         return LazyVGrid(columns: columns, spacing: 8) {
             ForEach(availableIcons, id: \.self) { iconName in
                 let isSelected = iconSystemName == iconName
                 Image(systemName: iconName)
-                    .font(.system(size: 22))
-                    .foregroundStyle(isSelected ? color(for: selectedColorName) : .primary)
+                    .font(.system(size: 20))
+                    .foregroundStyle(isSelected ? selectedColor : .primary)
                     .frame(width: 44, height: 44)
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(isSelected ? color(for: selectedColorName) : Color.clear, lineWidth: 2)
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(isSelected ? selectedColor.opacity(0.15) : Color(.systemGray6))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(isSelected ? selectedColor : Color.clear, lineWidth: 1.5)
                     )
                     .onTapGesture { iconSystemName = iconName }
             }
         }
     }
-    
-    private func color(for name: String) -> Color {
-        switch name {
-        case "systemRed": return Color(.systemRed)
-        case "systemOrange": return Color(.systemOrange)
-        case "systemYellow": return Color(.systemYellow)
-        case "systemGreen": return Color(.systemGreen)
-        case "systemMint": return Color(.systemMint)
-        case "systemTeal": return Color(.systemTeal)
-        case "systemCyan": return Color(.systemCyan)
-        case "systemBlue": return Color(.systemBlue)
-        case "systemIndigo": return Color(.systemIndigo)
-        case "systemPurple": return Color(.systemPurple)
-        case "systemPink": return Color(.systemPink)
-        case "systemBrown": return Color(.systemBrown)
-        case "systemGray": return Color(.systemGray)
-        default: return Color(.systemBlue)
+
+    private var colorGrid: some View {
+        let columns = [GridItem(.adaptive(minimum: 36), spacing: 12)]
+        return LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(UserCategory.presetColors, id: \.self) { colorName in
+                let isSelected = selectedColorName == colorName
+                Circle()
+                    .fill(color(for: colorName))
+                    .frame(width: 34, height: 34)
+                    .overlay {
+                        if isSelected {
+                            Image(systemName: "checkmark")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .onTapGesture { selectedColorName = colorName }
+            }
         }
     }
-    
-    private func resetForm() {
-        name = ""
-        iconSystemName = "tag.fill"
-        selectedColorName = "systemBlue"
+
+    // MARK: - Helpers
+
+    private func color(for name: String) -> Color {
+        switch name {
+        case "systemRed":    return Color(.systemRed)
+        case "systemOrange": return Color(.systemOrange)
+        case "systemYellow": return Color(.systemYellow)
+        case "systemGreen":  return Color(.systemGreen)
+        case "systemMint":   return Color(.systemMint)
+        case "systemTeal":   return Color(.systemTeal)
+        case "systemCyan":   return Color(.systemCyan)
+        case "systemBlue":   return Color(.systemBlue)
+        case "systemIndigo": return Color(.systemIndigo)
+        case "systemPurple": return Color(.systemPurple)
+        case "systemPink":   return Color(.systemPink)
+        case "systemBrown":  return Color(.systemBrown)
+        case "systemGray":   return Color(.systemGray)
+        default:             return Color(.systemBlue)
+        }
     }
-    
+
     private func saveCategory() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        
-        // Check for duplicates (excluding current category if editing)
-        let isDuplicate = dataManager.userCategories.contains { existingCategory in
-            existingCategory.name.lowercased() == trimmed.lowercased() &&
-            existingCategory.id != editingCategory?.id
+
+        let isDuplicate = dataManager.userCategories.contains {
+            $0.name.lowercased() == trimmed.lowercased() && $0.id != category?.id
         }
-        
-        if isDuplicate {
-            showValidationError = true
-            return
-        }
-        
-        if var updatedCategory = editingCategory {
-            // Update existing category properties while keeping the SAME ID
-            updatedCategory.name = trimmed
-            updatedCategory.iconSystemName = iconSystemName
-            updatedCategory.colorName = selectedColorName
-            
-            dataManager.updateUserCategory(updatedCategory)
+        guard !isDuplicate else { showValidationError = true; return }
+
+        if var updated = category {
+            updated.name = trimmed
+            updated.iconSystemName = iconSystemName
+            updated.colorName = selectedColorName
+            dataManager.updateUserCategory(updated)
         } else {
-            // Create new category
-            let newCategory = UserCategory(
-                name: trimmed,
-                iconSystemName: iconSystemName,
-                colorName: selectedColorName
-            )
-            dataManager.addUserCategory(newCategory)
+            let new = UserCategory(name: trimmed, iconSystemName: iconSystemName, colorName: selectedColorName)
+            dataManager.addUserCategory(new)
         }
-        
-        showingEditor = false
-        resetForm()
+        dismiss()
     }
 }
 
 #Preview {
     CategoryManagementView()
 }
-
-

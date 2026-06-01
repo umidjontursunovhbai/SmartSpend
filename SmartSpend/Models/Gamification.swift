@@ -173,15 +173,17 @@ struct ExpenseStreak: Codable {
     
     mutating func recordExpense(on date: Date = Date()) {
         let calendar = Calendar.current
-        
+        let today = calendar.startOfDay(for: date)
+
         if let lastDate = lastExpenseDate {
-            let daysBetween = calendar.dateComponents([.day], from: lastDate, to: date).day ?? 0
-            
+            let lastDay = calendar.startOfDay(for: lastDate)
+            let daysBetween = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
+
             if daysBetween == 1 {
                 // Consecutive day
                 currentStreak += 1
             } else if daysBetween == 0 {
-                // Same day, no change to streak
+                // Same calendar day, no change to streak
                 return
             } else {
                 // Streak broken
@@ -191,17 +193,19 @@ struct ExpenseStreak: Codable {
             // First expense
             currentStreak = 1
         }
-        
-        lastExpenseDate = date
+
+        lastExpenseDate = today
         longestStreak = max(longestStreak, currentStreak)
     }
-    
+
     mutating func checkStreakValidity() {
         guard let lastDate = lastExpenseDate else { return }
-        
+
         let calendar = Calendar.current
-        let daysSinceLastExpense = calendar.dateComponents([.day], from: lastDate, to: Date()).day ?? 0
-        
+        let lastDay = calendar.startOfDay(for: lastDate)
+        let today = calendar.startOfDay(for: Date())
+        let daysSinceLastExpense = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
+
         if daysSinceLastExpense > 1 {
             currentStreak = 0
         }

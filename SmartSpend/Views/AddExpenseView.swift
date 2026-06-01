@@ -273,12 +273,16 @@ struct AddExpenseView: View {
         }
     }
     
+    private static let commaFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 2
+        f.minimumFractionDigits = 0
+        return f
+    }()
+
     private func formatNumberWithCommas(_ number: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 2
-        formatter.minimumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: number)) ?? ""
+        return Self.commaFormatter.string(from: NSNumber(value: number)) ?? ""
     }
     
     private func getNumericValue(from text: String) -> Double? {

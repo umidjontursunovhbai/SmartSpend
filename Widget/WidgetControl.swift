@@ -5,7 +5,7 @@ import WidgetKit
 @available(iOS 18.0, *)
 struct SmartSpendControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "muydinov.SmartSpend.AddExpense") {
+        StaticControlConfiguration(kind: "com.tursunov.SmartSpend.AddExpense") {
             ControlWidgetButton(action: OpenAddExpenseIntent()) {
                 Label("Add Expense", systemImage: "banknote.fill")
             }
@@ -20,7 +20,7 @@ struct OpenAddExpenseIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        let defaults = UserDefaults(suiteName: "group.muydinov.SmartSpend") ?? UserDefaults.standard
+        let defaults = UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? UserDefaults.standard
         defaults.set(true, forKey: "openAddExpense")
         return .result()
     }

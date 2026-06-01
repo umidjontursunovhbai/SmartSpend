@@ -1,297 +1,282 @@
 import SwiftUI
 
-struct ChatMessage: Identifiable {
-    let id = UUID()
-    let content: String
-    let isUser: Bool
-    let timestamp: Date = Date()
-}
-
 struct SupportChatView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
-    @State private var messageText: String = ""
-    @State private var messages: [ChatMessage] = [
-        ChatMessage(content: "Hi there! I'm your SmartSpend AI assistant & Personal Accountant. How can I help you analyze your finances today?", isUser: false)
-    ]
-    @FocusState private var isFocused: Bool
-    
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Chat Header
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(.white)
-                                .font(.system(size: 20))
-                        )
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("support_agent_name".localized)
-                            .font(.headline)
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(.green)
-                                .frame(width: 8, height: 8)
-                            Text("support_agent_status".localized)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+            List {
+                // Summary section
+                Section {
+                    summaryRow("Spent this month", value: CurrencyFormatter.format(currentMonthTotal, currency: dataManager.user.currency))
+                    summaryRow("Daily average", value: CurrencyFormatter.format(dailyAverage, currency: dataManager.user.currency))
+                    summaryRow("Transactions", value: "\(currentMonthExpenses.count)")
+                    if previousMonthTotal > 0 {
+                        let change = ((currentMonthTotal - previousMonthTotal) / previousMonthTotal) * 100
+                        let isUp = change >= 0
+                        HStack {
+                            Text("vs last month")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Label(
+                                String(format: "%.1f%%", abs(change)),
+                                systemImage: isUp ? "arrow.up.right" : "arrow.down.right"
+                            )
+                            .font(.subheadline)
+                            .foregroundStyle(isUp ? .red : .green)
                         }
                     }
-                    
-                    Spacer()
+                } header: {
+                    Text("This Month")
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
-                
-                // Messages List
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(messages) { message in
-                                MessageBubble(message: message)
-                                    .id(message.id)
+
+                // Insights
+                Section("Insights") {
+                    ForEach(insights) { insight in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: insight.icon)
+                                .foregroundStyle(insight.iconColor)
+                                .frame(width: 24)
+                                .padding(.top, 1)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(insight.title)
+                                    .fontWeight(.medium)
+                                Text(insight.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                        .padding()
-                    }
-                    .onChange(of: messages.count) {
-                        withAnimation {
-                            proxy.scrollTo(messages.last?.id, anchor: .bottom)
-                        }
+                        .padding(.vertical, 2)
                     }
                 }
-                
-                // Input Area
-                VStack(spacing: 0) {
-                    Divider()
-                    HStack(spacing: 12) {
-                        TextField("chat_placeholder".localized, text: $messageText, axis: .vertical)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color(.systemGray6))
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
-                            .focused($isFocused)
-                            .lineLimit(1...5)
-                        
-                        Button(action: sendMessage) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundStyle(messageText.isEmpty ? Color.secondary : Color.blue)
-                        }
-                        .disabled(messageText.isEmpty)
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 10)
-                }
-                .background(.ultraThinMaterial)
             }
-            .navigationTitle("support".localized)
-            .navigationBarTitleDisplayMode(.inline)
+            .listStyle(.insetGrouped)
+            .navigationTitle("Insights")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("done".localized) { dismiss() }
-                        .fontWeight(.medium)
                 }
             }
         }
     }
-    
-    private func sendMessage() {
-        let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedMessage.isEmpty else { return }
-        
-        print("💬 AI Chat: User sent message: '\(trimmedMessage)'")
-        
-        // Immediately clear input and unfocus
-        messageText = ""
-        isFocused = false
-        
-        let userMessage = ChatMessage(content: trimmedMessage, isUser: true)
-        withAnimation {
-            messages.append(userMessage)
-        }
-        
-        // Simulate AI thinking
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            let responseText = generateIntelligentResponse(for: trimmedMessage)
-            print("🤖 AI Chat: Accountant responded: '\(responseText)'")
-            withAnimation {
-                messages.append(ChatMessage(content: responseText, isUser: false))
-            }
-        }
-    }
-    
-    private func generateIntelligentResponse(for input: String) -> String {
-        let lowercaseInput = " \(input.lowercased()) "
-        let currency = dataManager.user.currency
-        let calendar = Calendar.current
-        let now = Date()
-        
-        print("🔍 AI Deep Analysis: Parsing input intent...")
-        
-        // --- 1. DATE RANGE PARSING ---
-        var startDate: Date? = nil
-        var endDate: Date = now
-        var dateLabel = ""
-        
-        if lowercaseInput.contains(" today ") {
-            startDate = calendar.startOfDay(for: now)
-            dateLabel = "today"
-        } else if lowercaseInput.contains(" yesterday ") {
-            startDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))
-            endDate = calendar.startOfDay(for: now)
-            dateLabel = "yesterday"
-        } else if lowercaseInput.contains(" this week ") || lowercaseInput.contains(" current week ") {
-            startDate = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now))
-            dateLabel = "this week"
-        } else if lowercaseInput.contains(" this month ") || lowercaseInput.contains(" current month ") {
-            startDate = calendar.date(from: calendar.dateComponents([.year, .month], from: now))
-            dateLabel = "this month"
-        } else if lowercaseInput.contains(" this year ") || lowercaseInput.contains(" current year ") {
-            startDate = calendar.date(from: calendar.dateComponents([.year], from: now))
-            dateLabel = "this year"
-        } else if lowercaseInput.contains(" from ") || lowercaseInput.contains(" to ") || lowercaseInput.contains(" between ") {
-            // Complex range detection fallback
-            dateLabel = "the specified range"
-            // Note: In a production app, we'd use DataDetector here. 
-            // For now, we'll check common month names.
-            let months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
-            for (index, month) in months.enumerated() {
-                if lowercaseInput.contains(month) {
-                    var comps = DateComponents()
-                    comps.month = index + 1
-                    comps.year = calendar.component(.year, from: now)
-                    startDate = calendar.date(from: comps)
-                    endDate = calendar.date(byAdding: .month, value: 1, to: startDate!)!
-                    dateLabel = month.capitalized
-                    break
-                }
-            }
-        }
-        
-        let filteredExpenses = dataManager.expenses.filter { expense in
-            if let start = startDate {
-                return expense.date >= start && expense.date <= endDate
-            }
-            return true
-        }
 
-        // --- 2. INTENT CLASSIFICATION ---
-        
-        // A. Category Analysis (Which categories used? Top category?)
-        if lowercaseInput.contains(" category ") || lowercaseInput.contains(" categories ") || lowercaseInput.contains(" where ") || lowercaseInput.contains(" top ") || lowercaseInput.contains(" most ") {
-            print("🏷 AI Analysis: Category Focus")
-            let breakdown = groupExpensesByCategory(filteredExpenses)
-            if breakdown.isEmpty {
-                return "I don't see any categorized expenses for \(dateLabel.isEmpty ? "this period" : dateLabel)."
-            }
-            
-            if lowercaseInput.contains(" list ") || lowercaseInput.contains(" which ") || lowercaseInput.contains(" what kind ") {
-                let categoryNames = breakdown.keys.map { $0.name }.joined(separator: ", ")
-                return "For \(dateLabel.isEmpty ? "all time" : dateLabel), you used these categories: \(categoryNames). Total of \(breakdown.count) different categories."
-            }
-            
-            if let top = breakdown.max(by: { $0.value < $1.value }) {
-                let amount = CurrencyFormatter.format(top.value, currency: currency)
-                return "Your highest spending was in '\(top.key.name)' with \(amount) spent \(dateLabel.isEmpty ? "in total" : "during " + dateLabel)."
-            }
-        }
-        
-        // B. Spending Breakdown (How much spent?)
-        if lowercaseInput.contains(" spent ") || lowercaseInput.contains(" spending ") || lowercaseInput.contains(" total ") || lowercaseInput.contains(" how much ") {
-            print("📈 AI Analysis: Spending Focus")
-            let total = filteredExpenses.reduce(0) { $0 + $1.amount }
-            let formattedTotal = CurrencyFormatter.format(total, currency: currency)
-            
-            if !dateLabel.isEmpty {
-                return "You spent a total of \(formattedTotal) \(dateLabel). This includes \(filteredExpenses.count) transactions."
-            }
-            
-            return "Your total spending is \(formattedTotal) across \(filteredExpenses.count) transactions recorded in the app."
-        }
-        
-        // C. Last/Recent Transaction
-        if lowercaseInput.contains(" last ") || lowercaseInput.contains(" recent ") || lowercaseInput.contains(" latest ") {
-            print("🕒 AI Analysis: Recency Focus")
-            if let last = dataManager.expenses.sorted(by: { $0.date > $1.date }).first {
-                let amount = CurrencyFormatter.format(last.amount, currency: currency)
-                let date = last.date.formatted(date: .abbreviated, time: .shortened)
-                return "The last thing you tracked was '\(last.title)' for \(amount) on \(date)."
-            }
-        }
-
-        // D. Budget & Efficiency
-        if lowercaseInput.contains(" budget ") || lowercaseInput.contains(" safe ") || lowercaseInput.contains(" remaining ") {
-            print("💰 AI Analysis: Budget Focus")
-            let salary = dataManager.getCurrentMonthSalary()
-            let remaining = dataManager.getRemainingBudget()
-            
-            if salary == 0 { return "I need your monthly salary in Settings to calculate your remaining budget correctly." }
-            
-            if remaining < 0 {
-                return "You're over budget by \(CurrencyFormatter.format(abs(remaining), currency: currency)). I suggest reviewing your '\(groupExpensesByCategory(dataManager.expenses).max(by: { $0.value < $1.value })?.key.name ?? "top")' spending."
-            } else {
-                return "You have \(CurrencyFormatter.format(remaining, currency: currency)) left this month. You've used \(Int((1 - (remaining/salary)) * 100))% of your income."
-            }
-        }
-
-        // --- 3. FALLBACKS ---
-        if lowercaseInput.contains(" hi ") || lowercaseInput.contains(" hello ") || lowercaseInput.contains(" hey ") {
-            return "Hello! I'm your SmartSpend Accountant. I can analyze your spending by date ('this month', 'today') or by category ('top category', 'list categories'). What should I look at?"
-        }
-
-        return "I can analyze that for you. Try being specific, like 'how much did I spend this month' or 'what was my top category last year?'"
-    }
-
-    private func groupExpensesByCategory(_ expenses: [Expense]) -> [UserCategory: Double] {
-        var groups: [UserCategory: Double] = [:]
-        for exp in expenses {
-            let cat = dataManager.resolveCategory(id: exp.categoryId)
-            groups[cat, default: 0] += exp.amount
-        }
-        return groups
-    }
-}
-
-struct MessageBubble: View {
-    let message: ChatMessage
-    
-    var body: some View {
+    private func summaryRow(_ label: String, value: String) -> some View {
         HStack {
-            if message.isUser { Spacer() }
-            
-            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(message.isUser ? Color.blue : Color(.systemGray5))
-                    .foregroundStyle(message.isUser ? .white : .primary)
-                    .clipShape(BubbleShape(isUser: message.isUser))
-                
-                Text(message.timestamp, style: .time)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            Text(label)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+
+    // MARK: - Insights
+
+    private var insights: [SpendingInsight] {
+        var results: [SpendingInsight] = []
+
+        // 1. Budget alerts — most urgent, shown first
+        for budget in dataManager.categoryBudgets.filter({ $0.isEnabled && $0.amount > 0 }) {
+            let spent = currentMonthExpenses
+                .filter { $0.categoryId == budget.categoryId }
+                .reduce(0) { $0 + $1.amount }
+            let cat = dataManager.resolveCategory(id: budget.categoryId)
+            let fmt = dataManager.user.currency
+            if spent > budget.amount {
+                results.append(SpendingInsight(
+                    id: "over_\(budget.id)",
+                    icon: "exclamationmark.circle.fill",
+                    iconColor: .red,
+                    title: "\(cat.name) is over budget",
+                    detail: "Spent \(CurrencyFormatter.format(spent, currency: fmt)) of your \(CurrencyFormatter.format(budget.amount, currency: fmt)) limit",
+                    type: .warning
+                ))
+            } else if spent > budget.amount * 0.8 {
+                let remaining = budget.amount - spent
+                results.append(SpendingInsight(
+                    id: "near_\(budget.id)",
+                    icon: "exclamationmark.triangle.fill",
+                    iconColor: .orange,
+                    title: "\(cat.name) is nearing its limit",
+                    detail: "\(CurrencyFormatter.format(remaining, currency: fmt)) remaining of \(CurrencyFormatter.format(budget.amount, currency: fmt)) budget",
+                    type: .warning
+                ))
             }
-            
-            if !message.isUser { Spacer() }
+        }
+
+        // 2. Upcoming recurring bills
+        if !upcomingBills.isEmpty {
+            let total = upcomingBills.reduce(0) { $0 + $1.amount }
+            let names = upcomingBills.prefix(2).map { $0.title }.joined(separator: ", ")
+            let extra = upcomingBills.count > 2 ? " +\(upcomingBills.count - 2) more" : ""
+            results.append(SpendingInsight(
+                id: "bills",
+                icon: "calendar.badge.exclamationmark",
+                iconColor: .orange,
+                title: "Bills due this week",
+                detail: "\(names)\(extra) — \(CurrencyFormatter.format(total, currency: dataManager.user.currency)) total",
+                type: .warning
+            ))
+        }
+
+        // 3. Month-over-month trend
+        if previousMonthTotal > 0 && currentMonthTotal > 0 {
+            let change = ((currentMonthTotal - previousMonthTotal) / previousMonthTotal) * 100
+            if change < -10 {
+                results.append(SpendingInsight(
+                    id: "good_trend",
+                    icon: "checkmark.seal.fill",
+                    iconColor: .green,
+                    title: "Spending down \(String(format: "%.0f%%", abs(change)))",
+                    detail: "You're spending significantly less than last month. Keep it up!",
+                    type: .positive
+                ))
+            } else if change > 30 {
+                results.append(SpendingInsight(
+                    id: "up_trend",
+                    icon: "arrow.up.circle.fill",
+                    iconColor: .red,
+                    title: "Spending up \(String(format: "%.0f%%", change)) this month",
+                    detail: "You're spending considerably more than last month",
+                    type: .warning
+                ))
+            }
+        }
+
+        // 4. Top category
+        if let top = topCategory {
+            let pct = currentMonthTotal > 0 ? Int((top.amount / currentMonthTotal) * 100) : 0
+            results.append(SpendingInsight(
+                id: "top_cat",
+                icon: top.icon,
+                iconColor: top.color,
+                title: "Most spent: \(top.name)",
+                detail: "\(CurrencyFormatter.format(top.amount, currency: dataManager.user.currency)) — \(pct)% of this month's total",
+                type: .info
+            ))
+        }
+
+        // 5. Biggest single expense
+        if let biggest = currentMonthExpenses.max(by: { $0.amount < $1.amount }) {
+            let cat = dataManager.resolveCategory(id: biggest.categoryId)
+            let title = biggest.title.isEmpty ? "Unnamed expense" : biggest.title
+            results.append(SpendingInsight(
+                id: "biggest",
+                icon: "dollarsign.circle.fill",
+                iconColor: .purple,
+                title: "Biggest expense: \(title)",
+                detail: "\(CurrencyFormatter.format(biggest.amount, currency: dataManager.user.currency)) in \(cat.name) · \(biggest.date.formatted(date: .abbreviated, time: .omitted))",
+                type: .info
+            ))
+        }
+
+        // 6. Peak spending day of week (needs ≥3 data points per day to be meaningful)
+        if let peak = peakDayOfWeek {
+            results.append(SpendingInsight(
+                id: "peak_day",
+                icon: "calendar.badge.clock",
+                iconColor: .teal,
+                title: "\(peak.name)s are your busiest day",
+                detail: "Average \(CurrencyFormatter.format(peak.average, currency: dataManager.user.currency)) per \(peak.name) based on all records",
+                type: .info
+            ))
+        }
+
+        // 7. Empty state
+        if results.isEmpty {
+            results.append(SpendingInsight(
+                id: "empty",
+                icon: "chart.bar.doc.horizontal",
+                iconColor: Color(.systemGray),
+                title: "No insights yet",
+                detail: "Add expenses to get personalized spending insights here",
+                type: .info
+            ))
+        }
+
+        return results
+    }
+
+    // MARK: - Computed Properties
+
+    private var currentMonthExpenses: [Expense] {
+        let calendar = Calendar.current
+        return dataManager.expenses.filter {
+            calendar.isDate($0.date, equalTo: Date(), toGranularity: .month)
+        }
+    }
+
+    private var currentMonthTotal: Double {
+        currentMonthExpenses.reduce(0) { $0 + $1.amount }
+    }
+
+    private var previousMonthTotal: Double {
+        let calendar = Calendar.current
+        guard let lastMonth = calendar.date(byAdding: .month, value: -1, to: Date()) else { return 0 }
+        return dataManager.expenses
+            .filter { calendar.isDate($0.date, equalTo: lastMonth, toGranularity: .month) }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    private var dailyAverage: Double {
+        let day = max(1, Calendar.current.component(.day, from: Date()))
+        return currentMonthTotal / Double(day)
+    }
+
+    private var categoriesUsed: Int {
+        Set(currentMonthExpenses.map { $0.categoryId }).count
+    }
+
+    private var topCategory: (name: String, amount: Double, icon: String, color: Color)? {
+        var totals: [UUID: Double] = [:]
+        for exp in currentMonthExpenses {
+            totals[exp.categoryId, default: 0] += exp.amount
+        }
+        guard let top = totals.max(by: { $0.value < $1.value }) else { return nil }
+        let cat = dataManager.resolveCategory(id: top.key)
+        return (cat.name, top.value, cat.iconSystemName, cat.color)
+    }
+
+    private var peakDayOfWeek: (name: String, average: Double)? {
+        let calendar = Calendar.current
+        var dayAmounts: [Int: [Double]] = [:]
+        for exp in dataManager.expenses {
+            let weekday = calendar.component(.weekday, from: exp.date)
+            dayAmounts[weekday, default: []].append(exp.amount)
+        }
+        guard let peak = dayAmounts.max(by: {
+            ($0.value.reduce(0, +) / Double($0.value.count)) <
+            ($1.value.reduce(0, +) / Double($1.value.count))
+        }), peak.value.count >= 3 else { return nil }
+        let avg = peak.value.reduce(0, +) / Double(peak.value.count)
+        let names = DateFormatter().weekdaySymbols ?? ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+        return (names[peak.key - 1], avg)
+    }
+
+    private var upcomingBills: [RecurringExpense] {
+        let now = Date()
+        let sevenDaysLater = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
+        return dataManager.recurringExpenses.filter {
+            $0.isActive && $0.nextDueDate >= now && $0.nextDueDate <= sevenDaysLater
         }
     }
 }
 
-struct BubbleShape: Shape {
-    let isUser: Bool
-    
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect,
-                               byRoundingCorners: [.topLeft, .topRight, isUser ? .bottomLeft : .bottomRight],
-                               cornerRadii: CGSize(width: 16, height: 16))
-        return Path(path.cgPath)
+// MARK: - Supporting Types
+
+struct SpendingInsight: Identifiable {
+    let id: String
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let detail: String
+    let type: InsightType
+
+    enum InsightType {
+        case warning, info, positive
     }
 }
 

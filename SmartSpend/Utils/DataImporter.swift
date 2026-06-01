@@ -185,32 +185,16 @@ class DataImporter: ObservableObject {
                 }
             }
             
-            // Add all expenses on main thread
+            // Add all expenses on main thread in a single batch
             let group = DispatchGroup()
             group.enter()
-            
+
             DispatchQueue.main.async {
                 print("🔄 Adding \(expensesToAdd.count) expenses to DataManager...")
-                // Add expenses in batches to improve performance
-                let chunkSize = 100
-                for chunkStart in stride(from: 0, to: expensesToAdd.count, by: chunkSize) {
-                    let chunkEnd = min(chunkStart + chunkSize, expensesToAdd.count)
-                    let chunk = Array(expensesToAdd[chunkStart..<chunkEnd])
-                    
-                    for expense in chunk {
-                        dataManager.addExpense(expense)
-                    }
-                    
-                    // Allow UI to update between chunks
-                    if chunkEnd < expensesToAdd.count {
-                        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
-                    }
-                }
-                
+                dataManager.addExpensesBatch(expensesToAdd)
                 group.leave()
             }
-            
-            // Wait for all async work to complete
+
             group.wait()
             
             print("✅ Import completed: \(importedCount) imported, \(skippedCount) skipped")
@@ -554,72 +538,64 @@ class DataImporter: ObservableObject {
             }
         }
         
-        let formatters: [DateFormatter] = [
-            // Most common formats first
-            createDateFormatter("yyyy-MM-dd"),
-            createDateFormatter("MM/dd/yyyy"),
-            createDateFormatter("dd/MM/yyyy"),
-            createDateFormatter("M/d/yyyy"),
-            createDateFormatter("d/M/yyyy"),
-            createDateFormatter("yyyy/MM/dd"),
-            createDateFormatter("dd-MM-yyyy"),
-            createDateFormatter("dd.MM.yyyy"),
-            createDateFormatter("MM-dd-yyyy"),
-            createDateFormatter("M-d-yyyy"),
-            createDateFormatter("d-M-yyyy"),
-            createDateFormatter("yyyy.MM.dd"),
-            // With times
-            createDateFormatter("yyyy-MM-dd HH:mm:ss"),
-            createDateFormatter("MM/dd/yyyy HH:mm:ss"),
-            createDateFormatter("dd/MM/yyyy HH:mm:ss"),
-            createDateFormatter("M/d/yyyy HH:mm:ss"),
-            createDateFormatter("yyyy-MM-dd HH:mm"),
-            createDateFormatter("MM/dd/yyyy HH:mm"),
-            // ISO formats
-            createDateFormatter("yyyy-MM-dd'T'HH:mm:ss"),
-            createDateFormatter("yyyy-MM-dd'T'HH:mm:ss.SSS"),
-            createDateFormatter("yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            createDateFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSZ"),
-            createDateFormatter("yyyy-MM-dd'T'HH:mm:ssZ")
-        ]
-        
-        for formatter in formatters {
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone.current
+        for formatter in DataImporter.cachedDateFormatters {
             if let date = formatter.date(from: cleanedValue) {
                 return date
             }
         }
-        
-        // Try parsing with locale-aware date strings
-        let localeFormatters: [DateFormatter] = [
-            createDateFormatter("MMM dd, yyyy"),
-            createDateFormatter("MMMM dd, yyyy"),
-            createDateFormatter("dd MMM yyyy"),
-            createDateFormatter("dd MMMM yyyy"),
-            createDateFormatter("MMM dd yyyy"),
-            createDateFormatter("MMMM dd yyyy"),
-            createDateFormatter("dd-MMM-yyyy"),
-            createDateFormatter("dd.MMM.yyyy")
-        ]
-        
-        for formatter in localeFormatters {
-            formatter.locale = Locale(identifier: "en_US")
+
+        for formatter in DataImporter.cachedLocaleDateFormatters {
             if let date = formatter.date(from: cleanedValue) {
                 return date
             }
         }
-        
-        // Try ISO8601DateFormatter for ISO format dates
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = isoFormatter.date(from: cleanedValue) {
+
+        if let date = DataImporter.cachedISOFormatter.date(from: cleanedValue) {
             return date
         }
         
         return nil
     }
     
+    private static let cachedDateFormatters: [DateFormatter] = {
+        let formats = [
+            "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "M/d/yyyy", "d/M/yyyy",
+            "yyyy/MM/dd", "dd-MM-yyyy", "dd.MM.yyyy", "MM-dd-yyyy", "M-d-yyyy",
+            "d-M-yyyy", "yyyy.MM.dd",
+            "yyyy-MM-dd HH:mm:ss", "MM/dd/yyyy HH:mm:ss", "dd/MM/yyyy HH:mm:ss",
+            "M/d/yyyy HH:mm:ss", "yyyy-MM-dd HH:mm", "MM/dd/yyyy HH:mm",
+            "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+        ]
+        return formats.map { format in
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = TimeZone.current
+            f.dateFormat = format
+            return f
+        }
+    }()
+
+    private static let cachedLocaleDateFormatters: [DateFormatter] = {
+        let formats = [
+            "MMM dd, yyyy", "MMMM dd, yyyy", "dd MMM yyyy", "dd MMMM yyyy",
+            "MMM dd yyyy", "MMMM dd yyyy", "dd-MMM-yyyy", "dd.MMM.yyyy",
+        ]
+        return formats.map { format in
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US")
+            f.dateFormat = format
+            return f
+        }
+    }()
+
+    private static let cachedISOFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
     private func createDateFormatter(_ format: String) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = format

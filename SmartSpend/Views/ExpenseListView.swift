@@ -111,7 +111,29 @@ struct ExpenseListView: View {
         
         return expenses
     }
-    
+
+    var groupedExpenses: [(date: Date, expenses: [Expense], total: Double)] {
+        let calendar = Calendar.current
+        let dict = Dictionary(grouping: filteredExpenses) { expense in
+            calendar.startOfDay(for: expense.date)
+        }
+        return dict.map { date, dayExpenses in
+            let sorted = dayExpenses.sorted { $0.date > $1.date }
+            return (date: date, expenses: sorted, total: sorted.reduce(0) { $0 + $1.amount })
+        }
+        .sorted { $0.date > $1.date }
+    }
+
+    private func sectionDateLabel(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        let formatter = DateFormatter()
+        let isCurrentYear = calendar.component(.year, from: date) == calendar.component(.year, from: Date())
+        formatter.dateFormat = isCurrentYear ? "EEEE, MMM d" : "EEEE, MMM d, yyyy"
+        return formatter.string(from: date)
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -218,17 +240,32 @@ struct ExpenseListView: View {
                     .background(Color(.systemGroupedBackground))
                 } else {
                     List {
-                        ForEach(filteredExpenses) { expense in
-                            ExpenseRowView(
-                                expense: expense,
-                                isSelectionMode: $isSelectionMode,
-                                selectedExpenses: $selectedExpenses
-                            )
+                        ForEach(groupedExpenses, id: \.date) { group in
+                            Section {
+                                ForEach(group.expenses) { expense in
+                                    ExpenseRowView(
+                                        expense: expense,
+                                        isSelectionMode: $isSelectionMode,
+                                        selectedExpenses: $selectedExpenses
+                                    )
+                                }
+                            } header: {
+                                HStack {
+                                    Text(sectionDateLabel(group.date))
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .textCase(nil)
+                                    Spacer()
+                                    Text(CurrencyFormatter.format(group.total, currency: dataManager.user.currency))
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                        .textCase(nil)
+                                }
+                                .padding(.vertical, 2)
+                            }
                         }
                     }
-                    .listStyle(.plain)
-                    .background(Color(.systemGroupedBackground))
-                    .scrollContentBackground(.hidden)
+                    .listStyle(.insetGrouped)
                 }
             }
             .navigationTitle("expenses".localized)

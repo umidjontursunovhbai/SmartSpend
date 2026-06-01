@@ -1,91 +1,122 @@
 import SwiftUI
 
+// MARK: - Region grouping
+
+private enum CurrencyRegion: String, CaseIterable {
+    case major       = "Major"
+    case asian       = "Asian"
+    case middleEast  = "Middle East"
+    case european    = "European"
+    case african     = "African"
+    case latinAmerica = "Latin America"
+    case other       = "Other"
+
+    var currencies: [Currency] {
+        switch self {
+        case .major:        return [.usd, .eur, .gbp, .jpy, .cny, .aud, .cad, .chf, .inr, .brl]
+        case .asian:        return [.uzs, .krw, .sgd, .hkd, .twd, .thb, .myr, .idr, .php, .vnd]
+        case .middleEast:   return [.aed, .sar, .ils, .try_, .egp, .irr]
+        case .european:     return [.rub, .pln, .sek, .nok, .dkk, .czk, .huf, .ron, .bgn]
+        case .african:      return [.zar, .ngn, .kes, .etb, .ghs]
+        case .latinAmerica: return [.mxn, .ars, .clp, .cop, .pen]
+        case .other:        return [.nzd]
+        }
+    }
+}
+
+// MARK: - Main View
+
 struct CurrencySelectionView: View {
     @ObservedObject private var dataManager = DataManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var selectedCurrency: Currency
-    
+    @State private var searchText = ""
+
     init() {
         self._selectedCurrency = State(initialValue: DataManager.shared.user.currency)
     }
 
+    private var searchResults: [Currency] {
+        let query = searchText.lowercased()
+        return Currency.allCases.filter {
+            $0.rawValue.lowercased().contains(query) ||
+            $0.name.lowercased().contains(query)
+        }
+    }
+
+    private func select(_ currency: Currency) {
+        selectedCurrency = currency
+        dataManager.updateCurrency(currency)
+        dismiss()
+    }
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("select_currency".localized) {
-                    ForEach(Currency.allCases, id: \.self) { currency in
+            List {
+                if searchText.isEmpty {
+                    ForEach(CurrencyRegion.allCases, id: \.self) { region in
+                        Section(region.rawValue) {
+                            ForEach(region.currencies, id: \.self) { currency in
+                                CurrencyRowView(
+                                    currency: currency,
+                                    isSelected: selectedCurrency == currency,
+                                    onTap: { select(currency) }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(searchResults, id: \.self) { currency in
                         CurrencyRowView(
                             currency: currency,
                             isSelected: selectedCurrency == currency,
-                            onTap: { selectedCurrency = currency }
+                            onTap: { select(currency) }
                         )
                     }
                 }
-                
-                Section {
-                    Text("all_monetary_values".localized)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("currency".localized)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search currencies"
+            )
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    cancelButton
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    saveButton
+                    Button("cancel".localized) { dismiss() }
                 }
             }
         }
     }
-    
-    private var cancelButton: some View {
-        Button("cancel".localized) {
-            dismiss()
-        }
-        .foregroundStyle(.tint)
-    }
-    
-    private var saveButton: some View {
-        Button("save".localized) {
-            dataManager.updateCurrency(selectedCurrency)
-            dismiss()
-        }
-        .fontWeight(.semibold)
-        .foregroundStyle(.tint)
-    }
 }
+
+// MARK: - Row
 
 struct CurrencyRowView: View {
     let currency: Currency
     let isSelected: Bool
     let onTap: () -> Void
-    
+
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
+            HStack {
                 Text(currency.flag)
-                    .font(.title2)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(currency.rawValue)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    
-                    Text(currency.name)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                
+                    .font(.title3)
+
+                Text(currency.name)
+                    .foregroundStyle(.primary)
+
                 Spacer()
-                
+
+                Text(currency.rawValue)
+                    .foregroundStyle(.secondary)
+
                 if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: "checkmark")
+                        .fontWeight(.semibold)
                         .foregroundStyle(.tint)
-                        .font(.title3)
                 }
             }
             .contentShape(Rectangle())
