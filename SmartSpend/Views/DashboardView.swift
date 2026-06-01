@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct DashboardView: View {
     @ObservedObject private var dataManager = DataManager.shared
@@ -10,19 +11,23 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    timePeriodSelectorView
-                    
                     budgetOverviewSection
-                    
+
                     categoryBreakdownSection
-                    
+
                     spendingTrendsSection
-                    
+
                     spendingGoalsSection
                 }
-                .padding(.vertical)
+                .padding(.horizontal)
+                .padding(.bottom)
             }
             .background(Color(.systemGroupedBackground))
+            .safeAreaInset(edge: .top) {
+                periodSelector
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial)
+            }
             .navigationTitle("smartspend".localized)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -46,67 +51,52 @@ struct DashboardView: View {
             }
         }
     }
-    
-    // MARK: - Extracted Subviews
-    
-    private var timePeriodSelectorView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("time_period".localized)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-                .padding(.horizontal)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(TimePeriod.allCases, id: \.self) { period in
-                        timePeriodButton(for: period)
+
+    // MARK: - Period selector
+
+    private var customPillTitle: String {
+        guard dataManager.selectedTimePeriod == .customMonth else { return "custom_date_range".localized }
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return "\(f.string(from: dataManager.customStartDate)) – \(f.string(from: dataManager.customEndDate))"
+    }
+
+    private var periodSelector: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach([TimePeriod.today, .thisWeek, .currentMonth, .lastMonth, .all], id: \.self) { period in
+                    periodPill(title: period.localizedName,
+                               isSelected: dataManager.selectedTimePeriod == period) {
+                        dataManager.selectedTimePeriod = period
                     }
                 }
-                .padding(.horizontal, 16)
+                periodPill(title: customPillTitle,
+                           icon: "calendar",
+                           isSelected: dataManager.selectedTimePeriod == .customMonth) {
+                    showingCustomMonthPicker = true
+                }
             }
+            .padding(.horizontal, 16)
         }
-        .padding(.top, 8)
     }
-    
-    private func timePeriodButton(for period: TimePeriod) -> some View {
-        Button(action: {
-            if period == .customMonth {
-                showingCustomMonthPicker = true
-            } else {
-                dataManager.selectedTimePeriod = period
-            }
-        }) {
-            HStack(spacing: 6) {
-                Image(systemName: period.icon)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                
-                Text(period.localizedName)
-                    .font(.caption)
-                    .fontWeight(.medium)
+
+    private func periodPill(title: String, icon: String? = nil, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let icon { Image(systemName: icon).font(.caption2) }
+                Text(title).font(.subheadline.weight(.medium))
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                dataManager.selectedTimePeriod == period ?
-                Color(.systemBlue) :
-                Color(.systemGray6),
-                in: Capsule()
-            )
-            .foregroundStyle(dataManager.selectedTimePeriod == period ? .white : .primary)
-            .overlay(
-                Capsule()
-                    .stroke(
-                        dataManager.selectedTimePeriod == period ? Color.clear : Color(.systemGray4),
-                        lineWidth: 0.5
-                    )
-            )
+            .padding(.vertical, 7)
+            .background(isSelected ? Color.accentColor : Color(.systemGray5), in: Capsule())
+            .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.2), value: dataManager.selectedTimePeriod)
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
-    
+
+    // MARK: - Extracted Subviews
+
     private var budgetOverviewSection: some View {
         BudgetOverviewView(
             totalExpenses: dataManager.getTotalExpensesForPeriod(),
@@ -114,26 +104,22 @@ struct DashboardView: View {
             salary: dataManager.getCurrentSalaryForPeriod(),
             currency: dataManager.user.currency
         )
-        .padding(.horizontal)
     }
-    
+
     private var categoryBreakdownSection: some View {
         CategoryBreakdownView(
             breakdown: dataManager.getCategoryBreakdownForPeriod()
         )
-        .padding(.horizontal)
     }
-    
+
     private var spendingTrendsSection: some View {
         SpendingTrendsView()
-            .padding(.horizontal)
     }
-    
+
     @ViewBuilder
     private var spendingGoalsSection: some View {
         if !dataManager.spendingGoals.isEmpty {
             SpendingGoalsView(goals: dataManager.spendingGoals)
-                .padding(.horizontal)
         }
     }
     
@@ -378,36 +364,50 @@ struct SpendingTrendsView: View {
     @ObservedObject private var dataManager = DataManager.shared
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             HStack {
-                Label("spending_trends".localized, systemImage: "chart.line.uptrend.xyaxis")
+                Text("spending_trends".localized)
                     .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
                 Spacer()
             }
-            
-            // Simple trend indicators
-            HStack(spacing: 20) {
-                TrendIndicator(
+
+            HStack(spacing: 16) {
+                TrendStat(
                     title: "daily_avg".localized,
                     value: dataManager.getDailyAverageForPeriod(),
-                    currency: dataManager.user.currency,
-                    trend: .up
+                    currency: dataManager.user.currency
                 )
-                
-                TrendIndicator(
+                Divider().frame(height: 40)
+                TrendStat(
                     title: "weekly_avg".localized,
                     value: dataManager.getWeeklyAverageForPeriod(),
-                    currency: dataManager.user.currency,
-                    trend: .down
+                    currency: dataManager.user.currency
                 )
             }
         }
-        .padding(.vertical, 20)
-        .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+struct TrendStat: View {
+    let title: String
+    let value: Double
+    let currency: Currency
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(CurrencyFormatter.format(value, currency: currency))
+                .font(.title3.weight(.semibold))
+                .fontDesign(.rounded)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -450,55 +450,6 @@ struct CategoryBreakdownRow: View {
                 .foregroundStyle(.primary)
         }
         .padding(.vertical, 8)
-    }
-}
-
-struct TrendIndicator: View {
-    let title: String
-    let value: Double
-    let currency: Currency
-    let trend: TrendDirection
-    
-    enum TrendDirection {
-        case up, down, stable
-    }
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 4) {
-                Image(systemName: trendIcon)
-                    .font(.caption)
-                    .foregroundStyle(trendColor)
-                
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Text(CurrencyFormatter.format(value, currency: currency))
-                .font(.title3)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
-    }
-    
-    private var trendIcon: String {
-        switch trend {
-        case .up: return "arrow.up"
-        case .down: return "arrow.down"
-        case .stable: return "minus"
-        }
-    }
-    
-    private var trendColor: Color {
-        switch trend {
-        case .up: return .red
-        case .down: return .green
-        case .stable: return .secondary
-        }
     }
 }
 
@@ -552,60 +503,66 @@ struct BudgetOverviewView: View {
         return min(totalExpenses / salary, 1.0)
     }
     
+    private var ringColor: Color {
+        progressPercentage > 0.8 ? .red : .accentColor
+    }
+
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
+        VStack(spacing: 16) {
             HStack {
-                Label("budget_overview".localized, systemImage: "chart.pie.fill")
+                Text("budget_overview".localized)
                     .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
                 Spacer()
             }
-            
-            // Progress Section
-            VStack(spacing: 12) {
-                HStack {
-                    Text("budget_used".localized)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(Int(progressPercentage * 100))%")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(progressPercentage > 0.8 ? .red : .primary)
+
+            HStack(spacing: 24) {
+                // Budget ring
+                ZStack {
+                    Circle()
+                        .stroke(Color(.systemGray5), lineWidth: 9)
+                    Circle()
+                        .trim(from: 0, to: progressPercentage)
+                        .stroke(ringColor, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeInOut, value: progressPercentage)
+                    VStack(spacing: 1) {
+                        Text("\(Int(progressPercentage * 100))%")
+                            .font(.title3.weight(.bold))
+                            .fontDesign(.rounded)
+                        Text("budget_used".localized)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                
-                ProgressView(value: progressPercentage)
-                    .progressViewStyle(LinearProgressViewStyle(tint: progressPercentage > 0.8 ? Color(.systemRed) : Color(.systemBlue)))
-                    .scaleEffect(x: 1, y: 1.5, anchor: .center)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-            }
-            
-            // Budget Stats
-            HStack(spacing: 16) {
-                BudgetStatView(
-                    title: "spent".localized,
-                    amount: totalExpenses,
-                    currency: currency,
-                    color: Color(.systemRed)
-                )
-                
-                Divider()
-                    .frame(height: 40)
-                
-                BudgetStatView(
-                    title: "remaining".localized,
-                    amount: remainingBudget,
-                    currency: currency,
-                    color: Color(.systemGreen)
-                )
+                .frame(width: 96, height: 96)
+
+                // Spent / remaining
+                VStack(spacing: 10) {
+                    statRow(title: "spent".localized, amount: totalExpenses, color: Color(.systemRed))
+                    Divider()
+                    statRow(title: "remaining".localized, amount: remainingBudget, color: Color(.systemGreen))
+                }
+                .frame(maxWidth: .infinity)
             }
         }
-        .padding(.vertical, 20)
-        .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func statRow(title: String, amount: Double, color: Color) -> some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(CurrencyFormatter.format(amount, currency: currency))
+                .font(.subheadline.weight(.semibold))
+                .fontDesign(.rounded)
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
     }
 }
 
@@ -638,83 +595,78 @@ struct BudgetStatView: View {
 
 struct CategoryBreakdownView: View {
     let breakdown: [(name: String, amount: Double, color: Color, icon: String)]
-    
+    @ObservedObject private var dataManager = DataManager.shared
+
+    private var total: Double { breakdown.reduce(0) { $0 + $1.amount } }
+
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             HStack {
-                Label("category_breakdown".localized, systemImage: "chart.bar.fill")
+                Text("category_breakdown".localized)
                     .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
                 Spacer()
             }
-            
+
             if breakdown.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "chart.bar.xaxis")
-                        .font(.system(size: 40))
+                VStack(spacing: 8) {
+                    Image(systemName: "chart.pie")
+                        .font(.title)
                         .foregroundStyle(.tertiary)
-                    
                     Text("no_expenses_yet".localized)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
+                .padding(.vertical, 20)
             } else {
-                LazyVStack(spacing: 12) {
-                    ForEach(breakdown.prefix(5), id: \.name) { item in
-                        CategoryRowView(
-                            name: item.name,
-                            amount: item.amount,
-                            color: item.color,
-                            icon: item.icon
-                        )
+                HStack(spacing: 20) {
+                    Chart {
+                        ForEach(breakdown.prefix(8), id: \.name) { item in
+                            SectorMark(
+                                angle: .value("Amount", item.amount),
+                                innerRadius: .ratio(0.62),
+                                angularInset: 1.5
+                            )
+                            .cornerRadius(4)
+                            .foregroundStyle(item.color)
+                        }
+                    }
+                    .chartLegend(.hidden)
+                    .frame(width: 120, height: 120)
+                    .overlay {
+                        VStack(spacing: 1) {
+                            Text(CurrencyFormatter.formatCompact(total, currency: dataManager.user.currency))
+                                .font(.subheadline.bold())
+                                .fontDesign(.rounded)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
+                            Text("spent".localized)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 8)
+                    }
+
+                    VStack(spacing: 10) {
+                        ForEach(breakdown.prefix(4), id: \.name) { item in
+                            HStack(spacing: 8) {
+                                Circle().fill(item.color).frame(width: 8, height: 8)
+                                Text(item.name)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(CurrencyFormatter.format(item.amount, currency: dataManager.user.currency))
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                            }
+                        }
                     }
                 }
             }
         }
-        .padding(.vertical, 20)
-        .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
-    }
-}
-
-struct CategoryRowView: View {
-    let name: String
-    let amount: Double
-    let color: Color
-    let icon: String
-    @ObservedObject private var dataManager = DataManager.shared
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-                .font(.title3)
-                .frame(width: 36, height: 36)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-            }
-            
-            Spacer()
-            
-            Text(formatCurrency(amount, dataManager.user.currency))
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .fontDesign(.rounded)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 4)
-    }
-    
-    private func formatCurrency(_ amount: Double, _ currency: Currency) -> String {
-        return CurrencyFormatter.format(amount, currency: currency)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 

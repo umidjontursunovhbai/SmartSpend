@@ -3,40 +3,45 @@ import SwiftUI
 struct ExpenseListView: View {
     @ObservedObject private var dataManager = DataManager.shared
     @State private var searchText = ""
-    @State private var selectedCategoryId: String?
+    @State private var selectedCategoryIds: Set<String> = []
     @State private var selectedTimePeriod: TimePeriod = .all
     @State private var selectedCustomMonth: Date = Date()
     @State private var selectedStartDate: Date = Date()
     @State private var selectedEndDate: Date = Date()
     @State private var showingMonthPicker = false
     @State private var showingAddExpense = false
+    @State private var showingFilterSheet = false
     @State private var isDateRangeMode = true
     @State private var isSelectionMode = false
     @State private var selectedExpenses: Set<UUID> = []
-    
+
     enum TimePeriod: String, CaseIterable {
         case all = "All"
         case today = "Today"
+        case yesterday = "Yesterday"
         case weekly = "This Week"
         case monthly = "This Month"
         case customMonth = "Custom Month"
-        
+
         var icon: String {
             switch self {
             case .all: return "calendar"
             case .today: return "calendar.badge.exclamationmark"
+            case .yesterday: return "calendar.badge.minus"
             case .weekly: return "calendar.badge.clock"
             case .monthly: return "calendar.badge.plus"
             case .customMonth: return "calendar.badge.clock"
             }
         }
-        
+
         var localizedName: String {
             switch self {
             case .all:
                 return "time_period_all".localized
             case .today:
                 return "time_period_today".localized
+            case .yesterday:
+                return "yesterday".localized
             case .weekly:
                 return "time_period_this_week".localized
             case .monthly:
@@ -81,6 +86,8 @@ struct ExpenseListView: View {
                 return true
             case .today:
                 return Calendar.current.isDateInToday(expense.date)
+            case .yesterday:
+                return Calendar.current.isDateInYesterday(expense.date)
             case .weekly:
                 let calendar = Calendar.current
                 let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
@@ -98,17 +105,16 @@ struct ExpenseListView: View {
                 }
             }
         }
-        
+
         if !searchText.isEmpty {
             expenses = expenses.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
         }
-        
-        if let selectedId = selectedCategoryId {
-            expenses = expenses.filter { expense in
-                return expense.categoryId.uuidString == selectedId
-            }
+
+        // Multi-category filter — empty set means "all categories"
+        if !selectedCategoryIds.isEmpty {
+            expenses = expenses.filter { selectedCategoryIds.contains($0.categoryId.uuidString) }
         }
-        
+
         return expenses
     }
 
@@ -134,110 +140,99 @@ struct ExpenseListView: View {
         return formatter.string(from: date)
     }
 
+    private var isFilterActive: Bool {
+        selectedTimePeriod != .all || !selectedCategoryIds.isEmpty
+    }
+
+    private func customRangeText() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return "\(f.string(from: selectedStartDate)) – \(f.string(from: selectedEndDate))"
+    }
+
+    // Size the filter sheet to its content: short for a few categories, taller
+    // as more are added, but capped at ~90% so it never jumps to full unless the
+    // list genuinely needs it (then it scrolls and can be dragged up to .large).
+    private var filterSheetDetents: Set<PresentationDetent> {
+        let rows = max(availableFilterCategories.count, 1)
+        // nav bar + time section + category header/footer + rows
+        let estimated: CGFloat = 56 + 100 + 80 + CGFloat(rows) * 44 + 40
+        let cap = UIScreen.main.bounds.height * 0.9
+        return [.height(min(estimated, cap)), .large]
+    }
+
+    // The segmented control already exposes the quick time periods, so the
+    // active-filter bar only needs to surface categories and custom ranges.
+    private var showActiveFilterBar: Bool {
+        selectedTimePeriod == .customMonth || !selectedCategoryIds.isEmpty
+    }
+
+    private var activeFilterSummary: String {
+        var parts: [String] = []
+        if selectedTimePeriod == .customMonth {
+            parts.append(customRangeText())
+        }
+        let names = availableFilterCategories
+            .filter { selectedCategoryIds.contains($0.id) }
+            .map { $0.name }
+        if names.count == 1 {
+            parts.append(names[0])
+        } else if names.count == 2 {
+            parts.append("\(names[0]), \(names[1])")
+        } else if names.count > 2 {
+            parts.append("\(names[0]), \(names[1]) +\(names.count - 2)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Search and Filter Bar
-                VStack(spacing: 16) {
-                    // Search Bar
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.secondary)
-                        
-                        TextField("search_expenses".localized, text: $searchText)
-                            .textFieldStyle(.plain)
-                            .onSubmit {
-                                hideKeyboard()
-                            }
-                        
-                        if !searchText.isEmpty {
-                            Button(action: {
-                                searchText = ""
-                                hideKeyboard()
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                                    .font(.system(size: 16))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-                    
-                    // Time Period Filter
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(TimePeriod.allCases, id: \.self) { timePeriod in
-                                TimePeriodFilterButton(
-                                    timePeriod: timePeriod,
-                                    isSelected: selectedTimePeriod == timePeriod,
-                                    action: { 
-                                        if timePeriod == .customMonth {
-                                            showingMonthPicker = true
-                                        } else {
-                                            selectedTimePeriod = timePeriod
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                    }
-                    
-                    // Category Filter
-                    if !availableFilterCategories.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                CategoryFilterButton(
-                                    title: "all".localized,
-                                    isSelected: selectedCategoryId == nil,
-                                    action: { selectedCategoryId = nil }
-                                )
-                                
-                                ForEach(availableFilterCategories, id: \.id) { category in
-                                    CategoryFilterButton(
-                                        title: category.name,
-                                        icon: category.icon,
-                                        color: category.color,
-                                        isSelected: selectedCategoryId == category.id,
-                                        action: { selectedCategoryId = category.id }
-                                    )
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                        }
-                    }
+                // Pinned quick time-period segmented control
+                Picker("time_period".localized, selection: $selectedTimePeriod) {
+                    Text("all".localized).tag(TimePeriod.all)
+                    Text("time_period_today".localized).tag(TimePeriod.today)
+                    Text("yesterday".localized).tag(TimePeriod.yesterday)
+                    Text("timeframe_week".localized).tag(TimePeriod.weekly)
+                    Text("timeframe_month".localized).tag(TimePeriod.monthly)
                 }
+                .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
-                .padding(.bottom, 12)
-                .background(.regularMaterial)
-                
-                // Expenses List
-                if filteredExpenses.isEmpty {
-                    VStack(spacing: 16) {
+                .padding(.bottom, 8)
+
+                // Small active-filter bar — only for "hidden" filters
+                // (selected categories or a custom date range). Tapping the
+                // summary reopens the filter; Clear resets everything.
+                if showActiveFilterBar {
+                    HStack(spacing: 6) {
+                        Button {
+                            showingFilterSheet = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                                    .foregroundStyle(.tint)
+                                Text(activeFilterSummary)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
                         Spacer()
-                        
-                        Image(systemName: "doc.text.magnifyingglass")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
-                        
-                        Text("no_expenses_found".localized)
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                        
-                        Text("try_adjusting_filters".localized)
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                        
-                        Spacer()
+
+                        Button { clearFilters() } label: {
+                            Text("clear".localized).fontWeight(.medium)
+                        }
                     }
-                    .padding(.horizontal, 32)
-                    .background(Color(.systemGroupedBackground))
+                    .font(.caption)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                }
+
+                // List / empty state
+                if filteredExpenses.isEmpty {
+                    emptyState
                 } else {
                     List {
                         ForEach(groupedExpenses, id: \.date) { group in
@@ -271,17 +266,35 @@ struct ExpenseListView: View {
             .navigationTitle("expenses".localized)
             .navigationBarTitleDisplayMode(.large)
             .navigationBarBackButtonHidden(true)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "search_expenses".localized
+            )
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     leadingToolbarContent
                 }
-                
                 ToolbarItem(placement: .topBarTrailing) {
                     trailingToolbarContent
                 }
             }
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView()
+            }
+            .sheet(isPresented: $showingFilterSheet) {
+                ExpenseFilterSheet(
+                    categories: availableFilterCategories,
+                    selectedCategoryIds: $selectedCategoryIds,
+                    selectedTimePeriod: $selectedTimePeriod,
+                    onPickCustomRange: {
+                        showingFilterSheet = false
+                        showingMonthPicker = true
+                    },
+                    onClear: { clearFilters() }
+                )
+                .presentationDetents(filterSheetDetents)
+                .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showingMonthPicker) {
                 CalendarPickerView(
@@ -295,14 +308,54 @@ struct ExpenseListView: View {
             .overlay(alignment: .bottom) {
                 selectionInfoBar
             }
-            .onTapGesture {
-                hideKeyboard()
+        }
+    }
+
+    // MARK: - Empty state
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if !searchText.isEmpty {
+            ContentUnavailableView.search(text: searchText)
+        } else if isFilterActive {
+            ContentUnavailableView {
+                Label("no_expenses_found".localized, systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("try_adjusting_filters".localized)
+            } actions: {
+                Button("clear".localized) { clearFilters() }
+            }
+        } else {
+            ContentUnavailableView {
+                Label("no_expenses_found".localized, systemImage: "tray")
+            } description: {
+                Text("try_adjusting_filters".localized)
+            } actions: {
+                Button("add_expense".localized) { showingAddExpense = true }
+                    .buttonStyle(.borderedProminent)
             }
         }
     }
-    
+
+    private func clearFilters() {
+        withAnimation {
+            selectedTimePeriod = .all
+            selectedCategoryIds.removeAll()
+        }
+    }
+
     // MARK: - Toolbar Content
-    
+
+    private var filterButton: some View {
+        Button {
+            showingFilterSheet = true
+        } label: {
+            Image(systemName: isFilterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                .font(.title3)
+                .fontWeight(.medium)
+        }
+    }
+
     @ViewBuilder
     private var leadingToolbarContent: some View {
         if isSelectionMode {
@@ -312,9 +365,11 @@ struct ExpenseListView: View {
                     selectedExpenses.removeAll()
                 }
             }
+        } else {
+            filterButton
         }
     }
-    
+
     @ViewBuilder
     private var trailingToolbarContent: some View {
         if isSelectionMode {
@@ -339,7 +394,7 @@ struct ExpenseListView: View {
                             .foregroundStyle(Color.blue)
                     }
                 }
-                
+
                 Button(action: { showingAddExpense = true }) {
                     Image(systemName: "plus")
                         .font(.title3)
@@ -377,11 +432,7 @@ struct ExpenseListView: View {
         }
     }
 
-    
-    private func hideKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-    
+
     private func selectAllExpenses() {
         withAnimation {
             selectedExpenses = Set(filteredExpenses.map { $0.id })
@@ -401,7 +452,6 @@ struct ExpenseListView: View {
     }
 }
 
-// ... (CalendarPickerView, TimePeriodFilterButton, CategoryFilterButton remain unchanged)
 struct CalendarPickerView: View {
     @Binding var selectedStartDate: Date
     @Binding var selectedEndDate: Date
@@ -813,126 +863,114 @@ struct CalendarDayView: View {
     }
 }
 
-struct TimePeriodFilterButton: View {
-    let timePeriod: ExpenseListView.TimePeriod
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: timePeriod.icon)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                
-                Text(timePeriod.localizedName)
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                isSelected ? 
-                Color(.systemBlue) : 
-                Color(.systemGray6),
-                in: Capsule()
-            )
-            .foregroundStyle(isSelected ? .white : .primary)
-            .overlay(
-                Capsule()
-                    .stroke(
-                        isSelected ? Color.clear : Color(.systemGray4), 
-                        lineWidth: 0.5
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
-    }
-}
+// MARK: - Filter Sheet
 
-struct CategoryFilterButton: View {
-    let title: String
-    var icon: String?
-    var color: Color?
-    let isSelected: Bool
-    let action: () -> Void
-    
+struct ExpenseFilterSheet: View {
+    let categories: [ExpenseListView.FilterCategory]
+    @Binding var selectedCategoryIds: Set<String>
+    @Binding var selectedTimePeriod: ExpenseListView.TimePeriod
+    var onPickCustomRange: () -> Void
+    var onClear: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var hasActiveFilter: Bool {
+        selectedTimePeriod != .all || !selectedCategoryIds.isEmpty
+    }
+
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if let icon = icon {
-                    Image(systemName: icon)
-                        .font(.caption)
-                        .fontWeight(.medium)
+        NavigationStack {
+            List {
+                // Time period — only custom range here; quick periods live in the
+                // segmented control on the main screen.
+                Section("time_period".localized) {
+                    Button {
+                        onPickCustomRange()
+                    } label: {
+                        HStack {
+                            Label("custom_date_range".localized, systemImage: "calendar")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if selectedTimePeriod == .customMonth {
+                                Image(systemName: "checkmark")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.tint)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                isSelected ? 
-                (color ?? Color(.systemBlue)) : 
-                Color(.systemGray6),
-                in: Capsule()
-            )
-            .foregroundStyle(isSelected ? .white : .primary)
-            .overlay(
-                Capsule()
-                    .stroke(
-                        isSelected ? Color.clear : Color(.systemGray4), 
-                        lineWidth: 0.5
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
-    }
-}
 
-struct EmptyStateView: View {
-    let searchText: String
-    let hasFilter: Bool
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: searchText.isEmpty && !hasFilter ? "list.bullet.rectangle" : "magnifyingglass")
-                .font(.system(size: 50))
-                .foregroundStyle(.tertiary)
-            
-            VStack(spacing: 8) {
-                Text(searchText.isEmpty && !hasFilter ? "No Expenses Yet" : "No Expenses Found")
-                    .font(.title3)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                
-                if searchText.isEmpty && !hasFilter {
-                    Text("Tap + to add your first expense")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text("Try adjusting your search or filters")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
+                // Categories — multi select
+                Section {
+                    if categories.isEmpty {
+                        Text("no_expenses_yet".localized)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(categories, id: \.id) { category in
+                            Button {
+                                toggle(category.id)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: category.icon)
+                                        .foregroundStyle(category.color)
+                                        .frame(width: 28)
+                                    Text(category.name)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if selectedCategoryIds.contains(category.id) {
+                                        Image(systemName: "checkmark")
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(.tint)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Text("category".localized)
+                        Spacer()
+                        if !selectedCategoryIds.isEmpty {
+                            Text("\(selectedCategoryIds.count)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } footer: {
+                    Text("filter_category_hint".localized)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("filter".localized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("clear".localized) { onClear() }
+                        .disabled(!hasActiveFilter)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("done".localized) { dismiss() }
+                        .fontWeight(.semibold)
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
+    }
+
+    private func toggle(_ id: String) {
+        if selectedCategoryIds.contains(id) {
+            selectedCategoryIds.remove(id)
+        } else {
+            selectedCategoryIds.insert(id)
+        }
     }
 }
 
 #Preview {
     ExpenseListView()
-}
-
-// MARK: - Keyboard Dismissal
-extension View {
-    func hideKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
 }
