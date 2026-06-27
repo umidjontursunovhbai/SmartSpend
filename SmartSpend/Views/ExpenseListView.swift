@@ -203,28 +203,21 @@ struct ExpenseListView: View {
 
                 // Small active-filter bar — only for "hidden" filters
                 // (selected categories or a custom date range). Tapping the
-                // summary reopens the filter; Clear resets everything.
+                // summary reopens the filter sheet.
                 if showActiveFilterBar {
-                    HStack(spacing: 6) {
-                        Button {
-                            showingFilterSheet = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                                    .foregroundStyle(.tint)
-                                Text(activeFilterSummary)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .buttonStyle(.plain)
-
-                        Spacer()
-
-                        Button { clearFilters() } label: {
-                            Text("clear".localized).fontWeight(.medium)
+                    Button {
+                        showingFilterSheet = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                                .foregroundStyle(.tint)
+                            Text(activeFilterSummary)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Spacer()
                         }
                     }
+                    .buttonStyle(.plain)
                     .font(.caption)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
@@ -285,8 +278,11 @@ struct ExpenseListView: View {
             .sheet(isPresented: $showingFilterSheet) {
                 ExpenseFilterSheet(
                     categories: availableFilterCategories,
-                    selectedCategoryIds: $selectedCategoryIds,
+                    selectedCategoryIds: selectedCategoryIds,
                     selectedTimePeriod: $selectedTimePeriod,
+                    onApply: { categoryIds in
+                        selectedCategoryIds = categoryIds
+                    },
                     onPickCustomRange: {
                         showingFilterSheet = false
                         showingMonthPicker = true
@@ -867,15 +863,32 @@ struct CalendarDayView: View {
 
 struct ExpenseFilterSheet: View {
     let categories: [ExpenseListView.FilterCategory]
-    @Binding var selectedCategoryIds: Set<String>
+    @State private var draftCategoryIds: Set<String>
     @Binding var selectedTimePeriod: ExpenseListView.TimePeriod
+    var onApply: (Set<String>) -> Void
     var onPickCustomRange: () -> Void
     var onClear: () -> Void
 
     @Environment(\.dismiss) private var dismiss
 
+    init(
+        categories: [ExpenseListView.FilterCategory],
+        selectedCategoryIds: Set<String>,
+        selectedTimePeriod: Binding<ExpenseListView.TimePeriod>,
+        onApply: @escaping (Set<String>) -> Void,
+        onPickCustomRange: @escaping () -> Void,
+        onClear: @escaping () -> Void
+    ) {
+        self.categories = categories
+        self._draftCategoryIds = State(initialValue: selectedCategoryIds)
+        self._selectedTimePeriod = selectedTimePeriod
+        self.onApply = onApply
+        self.onPickCustomRange = onPickCustomRange
+        self.onClear = onClear
+    }
+
     private var hasActiveFilter: Bool {
-        selectedTimePeriod != .all || !selectedCategoryIds.isEmpty
+        selectedTimePeriod != .all || !draftCategoryIds.isEmpty
     }
 
     var body: some View {
@@ -885,6 +898,7 @@ struct ExpenseFilterSheet: View {
                 // segmented control on the main screen.
                 Section("time_period".localized) {
                     Button {
+                        onApply(draftCategoryIds)
                         onPickCustomRange()
                     } label: {
                         HStack {
@@ -922,7 +936,7 @@ struct ExpenseFilterSheet: View {
                                     Text(category.name)
                                         .foregroundStyle(.primary)
                                     Spacer()
-                                    if selectedCategoryIds.contains(category.id) {
+                                    if draftCategoryIds.contains(category.id) {
                                         Image(systemName: "checkmark")
                                             .fontWeight(.semibold)
                                             .foregroundStyle(.tint)
@@ -937,8 +951,8 @@ struct ExpenseFilterSheet: View {
                     HStack {
                         Text("category".localized)
                         Spacer()
-                        if !selectedCategoryIds.isEmpty {
-                            Text("\(selectedCategoryIds.count)")
+                        if !draftCategoryIds.isEmpty {
+                            Text("\(draftCategoryIds.count)")
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -951,11 +965,19 @@ struct ExpenseFilterSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("clear".localized) { onClear() }
+                    Button("clear".localized) {
+                        withAnimation(.snappy) {
+                            draftCategoryIds.removeAll()
+                        }
+                        onClear()
+                    }
                         .disabled(!hasActiveFilter)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("done".localized) { dismiss() }
+                    Button("done".localized) {
+                        onApply(draftCategoryIds)
+                        dismiss()
+                    }
                         .fontWeight(.semibold)
                 }
             }
@@ -963,10 +985,12 @@ struct ExpenseFilterSheet: View {
     }
 
     private func toggle(_ id: String) {
-        if selectedCategoryIds.contains(id) {
-            selectedCategoryIds.remove(id)
-        } else {
-            selectedCategoryIds.insert(id)
+        withAnimation(.snappy) {
+            if draftCategoryIds.contains(id) {
+                draftCategoryIds.remove(id)
+            } else {
+                draftCategoryIds.insert(id)
+            }
         }
     }
 }
