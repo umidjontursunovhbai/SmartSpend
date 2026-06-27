@@ -16,7 +16,7 @@ struct EditExpenseView: View {
     init(expense: Expense) {
         self.expense = expense
         self._title = State(initialValue: expense.title)
-        self._amount = State(initialValue: String(format: "%.2f", expense.amount))
+        self._amount = State(initialValue: AmountInputFormatter.formatValue(expense.amount))
         self._selectedCategory = State(initialValue: DataManager.shared.resolveCategory(id: expense.categoryId))
         self._selectedDate = State(initialValue: expense.date)
     }
@@ -36,9 +36,12 @@ struct EditExpenseView: View {
                         Text(dataManager.user.currency.symbol)
                             .foregroundStyle(.secondary)
                             .font(.body)
-                        TextField("0.00", text: $amount)
+                        TextField("0", text: $amount)
                             .keyboardType(.decimalPad)
                             .textFieldStyle(.plain)
+                            .onChange(of: amount) { _, _ in
+                                formatAmountInput()
+                            }
                     }
                     
                     // Category Selection - Focus on User Categories
@@ -106,9 +109,9 @@ struct EditExpenseView: View {
                     Button("Save") {
                         updateExpense()
                     }
-                    .disabled(title.isEmpty || amount.isEmpty || Double(amount) == nil)
+                    .disabled(title.isEmpty || amount.isEmpty || AmountInputFormatter.parse(amount) == nil)
                     .fontWeight(.semibold)
-                    .foregroundStyle(title.isEmpty || amount.isEmpty || Double(amount) == nil ? Color.secondary : Color.accentColor)
+                    .foregroundStyle(title.isEmpty || amount.isEmpty || AmountInputFormatter.parse(amount) == nil ? Color.secondary : Color.accentColor)
                 }
             }
             .sheet(isPresented: $showingCategoryManagement) {
@@ -118,7 +121,7 @@ struct EditExpenseView: View {
     }
     
     private func updateExpense() {
-        guard let amountValue = Double(amount), !title.isEmpty else { return }
+        guard let amountValue = AmountInputFormatter.parse(amount), !title.isEmpty else { return }
         
         // Find and update the expense - PRESERVE THE ORIGINAL ID
         if let index = dataManager.expenses.firstIndex(where: { $0.id == expense.id }) {
@@ -132,6 +135,13 @@ struct EditExpenseView: View {
         }
         
         dismiss()
+    }
+
+    private func formatAmountInput() {
+        let formatted = AmountInputFormatter.formatEditingText(amount)
+        if formatted != amount {
+            amount = formatted
+        }
     }
 }
 

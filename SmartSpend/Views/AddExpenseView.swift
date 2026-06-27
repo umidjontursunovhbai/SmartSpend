@@ -34,7 +34,7 @@ struct AddExpenseView: View {
                                     selectedCategory = category
                                 },
                                 onPrice: { price in
-                                    amount = formatNumberWithCommas(price)
+                                    amount = AmountInputFormatter.formatValue(price)
                                 }
                             )
                             .transition(.opacity)
@@ -115,7 +115,7 @@ struct AddExpenseView: View {
                     Button("save".localized) {
                         saveExpense()
                     }
-                    .disabled(title.isEmpty || amount.isEmpty || getNumericValue(from: amount) == nil || selectedCategory == nil)
+                    .disabled(title.isEmpty || amount.isEmpty || AmountInputFormatter.parse(amount) == nil || selectedCategory == nil)
                     .fontWeight(.semibold)
                 }
             }
@@ -159,7 +159,7 @@ struct AddExpenseView: View {
     }
     
     private func saveExpense() {
-        guard let amountValue = getNumericValue(from: amount),
+        guard let amountValue = AmountInputFormatter.parse(amount),
               !title.isEmpty,
               let categoryId = selectedCategory?.id else { return }
 
@@ -174,34 +174,10 @@ struct AddExpenseView: View {
     }
     
     private func formatAmountInput() {
-        // Remove all non-numeric characters except decimal point
-        let cleanedInput = amount.replacingOccurrences(of: "[^0-9.]", with: "", options: .regularExpression)
-        
-        // Convert to number and format with commas
-        if let number = Double(cleanedInput) {
-            let formatted = formatNumberWithCommas(number)
-            if formatted != amount {
-                amount = formatted
-            }
+        let formatted = AmountInputFormatter.formatEditingText(amount)
+        if formatted != amount {
+            amount = formatted
         }
-    }
-    
-    private static let commaFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 2
-        f.minimumFractionDigits = 0
-        return f
-    }()
-
-    private func formatNumberWithCommas(_ number: Double) -> String {
-        return Self.commaFormatter.string(from: NSNumber(value: number)) ?? ""
-    }
-    
-    private func getNumericValue(from text: String) -> Double? {
-        // Remove commas and convert to double
-        let cleanedText = text.replacingOccurrences(of: ",", with: "")
-        return Double(cleanedText)
     }
 }
 

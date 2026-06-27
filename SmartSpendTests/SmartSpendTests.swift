@@ -58,4 +58,13 @@ struct SmartSpendTests {
         #expect(other.iconSystemName == "tag.fill")
         #expect(other.colorName == "systemGray")
     }
+
+    @Test("Amount input formatter groups while preserving typed decimals")
+    func amountInputFormatterGroupsWhilePreservingTypedDecimals() async throws {
+        #expect(AmountInputFormatter.formatEditingText("1500000") == "1,500,000")
+        #expect(AmountInputFormatter.formatEditingText("1500000.") == "1,500,000.")
+        #expect(AmountInputFormatter.formatEditingText("1500000.50") == "1,500,000.50")
+        #expect(AmountInputFormatter.formatValue(150000.0) == "150,000")
+        #expect(AmountInputFormatter.parse("1,500,000.50") == 1_500_000.50)
+    }
 }

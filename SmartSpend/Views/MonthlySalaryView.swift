@@ -105,7 +105,7 @@ struct MonthlySalaryView: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                    .disabled(salaryAmount.isEmpty || Double(salaryAmount) == nil)
+                    .disabled(salaryAmount.isEmpty || AmountInputFormatter.parse(salaryAmount) == nil)
                 }
             }
             .onAppear { loadExistingSalary() }
@@ -128,14 +128,14 @@ struct MonthlySalaryView: View {
         if let existing = dataManager.monthlySalaries.first(where: {
             $0.year == selectedYear && $0.month == selectedMonth
         }) {
-            salaryAmount = String(existing.amount)
+            salaryAmount = AmountInputFormatter.formatValue(existing.amount)
         } else {
             salaryAmount = ""
         }
     }
 
     private func saveSalary() {
-        guard let amount = Double(salaryAmount) else { return }
+        guard let amount = AmountInputFormatter.parse(salaryAmount) else { return }
         dataManager.setSalaryForMonth(year: selectedYear, month: selectedMonth, amount: amount)
     }
 }
@@ -197,5 +197,7 @@ private struct SalaryNumberPad: View {
             }
             amount += key
         }
+
+        amount = AmountInputFormatter.formatEditingText(amount)
     }
 }

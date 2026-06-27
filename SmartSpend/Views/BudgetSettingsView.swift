@@ -190,7 +190,10 @@ struct CategoryBudgetSettingRow: View {
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 110)
-                    .onChange(of: budgetAmount) { _, _ in updateBudget() }
+                    .onChange(of: budgetAmount) { _, _ in
+                        formatBudgetInput()
+                        updateBudget()
+                    }
             }
 
             Toggle("", isOn: $isEnabled.animation())
@@ -202,7 +205,7 @@ struct CategoryBudgetSettingRow: View {
     }
     
     private func updateBudget() {
-        let amount = Double(budgetAmount) ?? 0
+        let amount = AmountInputFormatter.parse(budgetAmount) ?? 0
         if let index = dataManager.categoryBudgets.firstIndex(where: { $0.categoryId == category.id }) {
             dataManager.categoryBudgets[index].amount = amount
             dataManager.categoryBudgets[index].isEnabled = isEnabled
@@ -214,11 +217,18 @@ struct CategoryBudgetSettingRow: View {
     
     private func updateLocalState() {
         if let budget = budget {
-            budgetAmount = budget.amount > 0 ? String(format: "%.0f", budget.amount) : ""
+            budgetAmount = budget.amount > 0 ? AmountInputFormatter.formatValue(budget.amount) : ""
             isEnabled = budget.isEnabled
         } else {
             budgetAmount = ""
             isEnabled = false
+        }
+    }
+
+    private func formatBudgetInput() {
+        let formatted = AmountInputFormatter.formatEditingText(budgetAmount)
+        if formatted != budgetAmount {
+            budgetAmount = formatted
         }
     }
 }
@@ -290,8 +300,9 @@ struct AddSpendingGoalView: View {
                     HStack {
                         Text(dataManager.user.currency.symbol)
                             .foregroundStyle(.secondary)
-                        TextField("0.00", text: $targetAmount)
+                        TextField("0", text: $targetAmount)
                             .keyboardType(.decimalPad)
+                            .onChange(of: targetAmount) { _, _ in formatTargetAmountInput() }
                     }
                     
                     DatePicker("Deadline", selection: $deadline, in: Date()..., displayedComponents: .date)
@@ -327,7 +338,7 @@ struct AddSpendingGoalView: View {
                     Button("Save") {
                         saveGoal()
                     }
-                    .disabled(title.isEmpty || targetAmount.isEmpty || Double(targetAmount) == nil || selectedCategory == nil)
+                    .disabled(title.isEmpty || targetAmount.isEmpty || AmountInputFormatter.parse(targetAmount) == nil || selectedCategory == nil)
                     .foregroundStyle(.tint)
                     .fontWeight(.semibold)
                 }
@@ -341,7 +352,7 @@ struct AddSpendingGoalView: View {
     }
     
     private func saveGoal() {
-        guard let amount = Double(targetAmount), 
+        guard let amount = AmountInputFormatter.parse(targetAmount),
               amount > 0,
               let categoryId = selectedCategory?.id else { return }
         
@@ -354,6 +365,13 @@ struct AddSpendingGoalView: View {
         dataManager.spendingGoals.append(goal)
         dataManager.saveSpendingGoals()
         dismiss()
+    }
+
+    private func formatTargetAmountInput() {
+        let formatted = AmountInputFormatter.formatEditingText(targetAmount)
+        if formatted != targetAmount {
+            targetAmount = formatted
+        }
     }
 }
 

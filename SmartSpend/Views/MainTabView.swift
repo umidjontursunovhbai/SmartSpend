@@ -248,7 +248,7 @@ struct SettingsView: View {
 
             .sheet(isPresented: $showingMonthlySalary) {
                 MonthlySalaryView()
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.fraction(0.65), .large])
                     .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showingCurrencySelection) {
@@ -286,4 +286,3 @@ struct SettingsView: View {
 #Preview {
     MainTabView()
 }
-

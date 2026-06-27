@@ -44,11 +44,15 @@ struct ExpenseRowView: View {
 
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(categoryDisplayInfo.color.gradient)
+                        .fill(.thinMaterial)
                         .frame(width: 46, height: 46)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(categoryDisplayInfo.color.opacity(0.28), lineWidth: 1)
+                        )
                     Image(systemName: categoryDisplayInfo.icon)
                         .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(categoryDisplayInfo.color)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {

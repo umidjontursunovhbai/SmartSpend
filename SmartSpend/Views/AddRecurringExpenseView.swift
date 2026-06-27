@@ -30,6 +30,7 @@ struct AddRecurringExpenseView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 140)
+                            .onChange(of: amount) { _, _ in formatAmountInput() }
                     }
 
                     RecurringCategoryPicker(selectedCategory: $selectedCategory) {
@@ -97,13 +98,13 @@ struct AddRecurringExpenseView: View {
     }
     
     private var canSave: Bool {
-        guard let value = Double(amount), value > 0 else { return false }
+        guard let value = AmountInputFormatter.parse(amount), value > 0 else { return false }
         return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && selectedCategory != nil
     }
 
     private func saveRecurringExpense() {
-        guard let amountValue = Double(amount), let categoryId = selectedCategory?.id else { return }
+        guard let amountValue = AmountInputFormatter.parse(amount), let categoryId = selectedCategory?.id else { return }
 
         var newRecurring = RecurringExpense(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -117,6 +118,13 @@ struct AddRecurringExpenseView: View {
 
         dataManager.addRecurringExpense(newRecurring)
         dismiss()
+    }
+
+    private func formatAmountInput() {
+        let formatted = AmountInputFormatter.formatEditingText(amount)
+        if formatted != amount {
+            amount = formatted
+        }
     }
 }
 
@@ -151,6 +159,7 @@ struct EditRecurringExpenseView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 140)
+                            .onChange(of: amount) { _, _ in formatAmountInput() }
                     }
 
                     RecurringCategoryPicker(selectedCategory: $selectedCategory) {
@@ -236,13 +245,12 @@ struct EditRecurringExpenseView: View {
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !amount.isEmpty &&
-        Double(amount) != nil &&
-        Double(amount)! > 0
+        (AmountInputFormatter.parse(amount) ?? 0) > 0
     }
     
     private func loadExpenseData() {
         title = recurringExpense.title
-        amount = String(format: "%.2f", recurringExpense.amount)
+        amount = AmountInputFormatter.formatValue(recurringExpense.amount)
         selectedCategory = DataManager.shared.resolveCategory(id: recurringExpense.categoryId)
         selectedRecurrence = recurringExpense.recurrenceType
         startDate = recurringExpense.startDate
@@ -252,7 +260,7 @@ struct EditRecurringExpenseView: View {
     }
     
     private func saveChanges() {
-        guard let amountValue = Double(amount) else { return }
+        guard let amountValue = AmountInputFormatter.parse(amount) else { return }
         
         var updatedExpense = recurringExpense
         updatedExpense.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -265,6 +273,13 @@ struct EditRecurringExpenseView: View {
         
         dataManager.updateRecurringExpense(updatedExpense)
         dismiss()
+    }
+
+    private func formatAmountInput() {
+        let formatted = AmountInputFormatter.formatEditingText(amount)
+        if formatted != amount {
+            amount = formatted
+        }
     }
 }
 
