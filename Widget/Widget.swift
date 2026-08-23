@@ -180,30 +180,27 @@ struct SmallWidgetView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: "banknote.fill")
-                    .foregroundStyle(.green)
-                    .font(.caption)
-                Text("SmartSpend")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text("Today")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(formatAmount(entry.todayTotal, code: entry.currencyCode))
-                .font(.title2.bold())
-                .minimumScaleFactor(0.6)
+        VStack(alignment: .leading, spacing: 10) {
+            WidgetTopLine(title: "Today", icon: "wallet.pass.fill")
+
+            Spacer(minLength: 0)
+
+            Text(widgetAmount(entry.todayTotal, code: entry.currencyCode))
+                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .minimumScaleFactor(0.55)
                 .lineLimit(1)
-            if entry.monthlySalary > 0 {
-                ProgressView(value: budgetProgress)
-                    .progressViewStyle(.linear)
-                    .tint(budgetProgress > 0.8 ? .red : .green)
+
+            VStack(alignment: .leading, spacing: 6) {
+                WidgetProgressBar(progress: budgetProgress)
+                Text(entry.monthlySalary > 0 ? "\(Int(budgetProgress * 100))% of monthly budget" : "Monthly salary not set")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
         }
-        .padding()
+        .padding(16)
     }
 }
 
@@ -217,64 +214,47 @@ struct MediumWidgetView: View {
         return min(entry.monthTotal / entry.monthlySalary, 1.0)
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Header
-            HStack {
-                HStack(spacing: 5) {
-                    Image(systemName: "banknote.fill")
-                        .foregroundStyle(.green)
-                        .font(.caption)
-                    Text("SmartSpend")
-                        .font(.caption.bold())
-                }
-                Spacer()
-                Text(monthYearString())
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(.quaternary, in: Capsule())
-            }
-
-            // Spending cards
-            HStack(spacing: 8) {
-                spendingCard(label: "TODAY", amount: entry.todayTotal, code: entry.currencyCode)
-                spendingCard(label: "THIS MONTH", amount: entry.monthTotal, code: entry.currencyCode)
-            }
-
-            // Budget bar
-            if entry.monthlySalary > 0 {
-                HStack(spacing: 6) {
-                    ProgressView(value: budgetProgress)
-                        .progressViewStyle(.linear)
-                        .tint(budgetProgress > 0.8 ? .red : budgetProgress > 0.6 ? .orange : .green)
-                    let remaining = entry.monthlySalary - entry.monthTotal
-                    Text("\(formatAmount(remaining, code: entry.currencyCode)) left")
-                        .font(.caption2.bold())
-                        .foregroundStyle(budgetProgress > 0.8 ? .red : .green)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                }
-            }
-        }
-        .padding(14)
+    private var remaining: Double {
+        max(entry.monthlySalary - entry.monthTotal, 0)
     }
 
-    private func spendingCard(label: String, amount: Double, code: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.5)
-            Text(formatAmount(amount, code: code))
-                .font(.system(size: 16, weight: .bold))
-                .minimumScaleFactor(0.5)
-                .lineLimit(1)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .center) {
+                WidgetTopLine(title: "SmartSpend", icon: "wallet.pass.fill")
+                Spacer()
+                Text(monthYearShortString())
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 12) {
+                WidgetValueBlock(title: "Today", value: widgetAmount(entry.todayTotal, code: entry.currencyCode))
+                Divider().opacity(0.35)
+                WidgetValueBlock(title: "Month", value: widgetAmount(entry.monthTotal, code: entry.currencyCode))
+            }
+
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    WidgetProgressBar(progress: budgetProgress)
+                    Text(entry.monthlySalary > 0 ? "\(widgetAmount(remaining, code: entry.currencyCode)) left" : "Set monthly salary")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+
+                Button(intent: OpenAddExpenseIntent()) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 30, height: 30)
+                        .foregroundStyle(.white)
+                        .background(Color.accentColor, in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+        .padding(16)
     }
 }
 
@@ -288,115 +268,66 @@ struct LargeWidgetView: View {
         return min(entry.monthTotal / entry.monthlySalary, 1.0)
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+    private var remaining: Double {
+        max(entry.monthlySalary - entry.monthTotal, 0)
+    }
 
-            // ── Header ──────────────────────────────────────
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "banknote.fill")
-                        .foregroundStyle(.green)
-                        .font(.subheadline)
-                    Text("SmartSpend")
-                        .font(.subheadline.bold())
+                VStack(alignment: .leading, spacing: 3) {
+                    WidgetTopLine(title: "SmartSpend", icon: "wallet.pass.fill")
+                    Text(monthYearString())
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(monthYearString())
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.quaternary, in: Capsule())
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 12)
-
-            // ── Spending cards ───────────────────────────────
-            HStack(spacing: 10) {
-                bigSpendingCard(label: "TODAY", amount: entry.todayTotal)
-                bigSpendingCard(label: "THIS MONTH", amount: entry.monthTotal)
-            }
-            .padding(.horizontal, 12)
-
-            // ── Budget bar ───────────────────────────────────
-            if entry.monthlySalary > 0 {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack {
-                        Text("BUDGET")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .tracking(0.5)
-                        Spacer()
-                        let remaining = entry.monthlySalary - entry.monthTotal
-                        Text("\(formatAmount(remaining, code: entry.currencyCode)) remaining")
-                            .font(.caption.bold())
-                            .foregroundStyle(budgetProgress > 0.8 ? .red : .green)
-                    }
-                    ProgressView(value: budgetProgress)
-                        .progressViewStyle(.linear)
-                        .tint(budgetProgress > 0.8 ? .red : budgetProgress > 0.6 ? .orange : .green)
+                Button(intent: OpenAddExpenseIntent()) {
+                    Label("Add", systemImage: "plus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 11)
+                        .frame(height: 31)
+                        .foregroundStyle(.white)
+                        .background(Color.accentColor, in: Capsule())
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
+                .buttonStyle(.plain)
             }
 
-            // ── Add Expense quick-action button ─────────────
-            Button(intent: OpenAddExpenseIntent()) {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.subheadline)
-                    Text("Add Expense")
-                        .font(.subheadline.bold())
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.green.opacity(0.6))
-                }
-                .foregroundStyle(.green)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 11)
-                .background(.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            HStack(spacing: 14) {
+                WidgetValueBlock(title: "Today", value: widgetAmount(entry.todayTotal, code: entry.currencyCode))
+                Divider().opacity(0.35)
+                WidgetValueBlock(title: "This month", value: widgetAmount(entry.monthTotal, code: entry.currencyCode))
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
 
-            // ── Top categories ───────────────────────────────
-            if !entry.topCategories.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
                 HStack {
-                    Text("TOP SPENDING")
-                        .font(.system(size: 10, weight: .semibold))
+                    Text("Budget")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .tracking(0.5)
                     Spacer()
+                    Text(entry.monthlySalary > 0 ? "\(widgetAmount(remaining, code: entry.currencyCode)) left" : "Salary not set")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 6)
+                WidgetProgressBar(progress: budgetProgress)
+            }
 
-                VStack(spacing: 0) {
-                    ForEach(Array(entry.topCategories.enumerated()), id: \.element.id) { index, cat in
-                        HStack(spacing: 10) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 7)
-                                    .fill(colorFromName(cat.colorName).opacity(0.15))
-                                    .frame(width: 30, height: 30)
-                                Image(systemName: cat.icon)
-                                    .foregroundStyle(colorFromName(cat.colorName))
-                                    .font(.caption)
-                            }
-                            Text(cat.name)
-                                .font(.subheadline)
-                            Spacer()
-                            Text(formatAmount(cat.amount, code: entry.currencyCode))
-                                .font(.subheadline.bold())
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 7)
+            VStack(alignment: .leading, spacing: 9) {
+                Text("Top categories")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
 
-                        if index < entry.topCategories.count - 1 {
-                            Divider()
-                                .padding(.leading, 56)
+                if entry.topCategories.isEmpty {
+                    Text("Add expenses to see trends")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 7) {
+                        ForEach(entry.topCategories.prefix(3)) { category in
+                            WidgetCategoryLine(category: category, currencyCode: entry.currencyCode)
                         }
                     }
                 }
@@ -404,22 +335,101 @@ struct LargeWidgetView: View {
 
             Spacer(minLength: 0)
         }
+        .padding(16)
     }
+}
 
-    private func bigSpendingCard(label: String, amount: Double) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
+// MARK: - Home Screen Shared Components
+
+private struct WidgetTopLine: View {
+    let title: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+    }
+}
+
+private struct WidgetValueBlock: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
-                .tracking(0.5)
-            Text(formatAmount(amount, code: entry.currencyCode))
-                .font(.title3.bold())
+                .lineLimit(1)
+            Text(value)
+                .font(.system(size: 24, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct WidgetProgressBar: View {
+    let progress: Double
+
+    private var safeProgress: Double {
+        min(max(progress, 0), 1)
+    }
+
+    private var progressColor: Color {
+        if safeProgress > 0.85 { return .red }
+        if safeProgress > 0.65 { return .orange }
+        return Color.accentColor
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.secondary.opacity(0.18))
+                Capsule()
+                    .fill(progressColor)
+                    .frame(width: max(proxy.size.width * safeProgress, 5))
+            }
+        }
+        .frame(height: 5)
+    }
+}
+
+private struct WidgetCategoryLine: View {
+    let category: SmartSpendEntry.CategoryRow
+    let currencyCode: String
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: category.icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(colorFromName(category.colorName))
+                .frame(width: 20)
+
+            Text(category.name)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Text(widgetAmount(category.amount, code: currencyCode))
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+        }
     }
 }
 
@@ -549,15 +559,53 @@ private func formatAmount(_ amount: Double, code: String) -> String {
     return formatter.string(from: NSNumber(value: amount)) ?? "\(code) \(String(format: "%.2f", amount))"
 }
 
+private func widgetAmount(_ amount: Double, code: String) -> String {
+    let compact = compactAmountWithDecimal(amount)
+    if code == "UZS" {
+        return "\(compact) so'm"
+    }
+    return "\(currencySymbol(for: code))\(compact)"
+}
+
 private func compactAmount(_ amount: Double) -> String {
     if amount >= 1_000_000 { return String(format: "%.0fM", amount / 1_000_000) }
     if amount >= 1_000    { return String(format: "%.0fK", amount / 1_000) }
     return String(format: "%.0f", amount)
 }
 
+private func compactAmountWithDecimal(_ amount: Double) -> String {
+    let absAmount = abs(amount)
+    if absAmount >= 1_000_000 {
+        return trimTrailingZero(String(format: "%.1fM", amount / 1_000_000))
+    }
+    if absAmount >= 1_000 {
+        return trimTrailingZero(String(format: "%.1fK", amount / 1_000))
+    }
+    return trimTrailingZero(String(format: "%.0f", amount))
+}
+
+private func trimTrailingZero(_ value: String) -> String {
+    value
+        .replacingOccurrences(of: ".0M", with: "M")
+        .replacingOccurrences(of: ".0K", with: "K")
+}
+
+private func currencySymbol(for code: String) -> String {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .currency
+    formatter.currencyCode = code
+    return formatter.currencySymbol ?? "\(code) "
+}
+
 private func monthYearString() -> String {
     let f = DateFormatter()
     f.dateFormat = "MMMM yyyy"
+    return f.string(from: Date())
+}
+
+private func monthYearShortString() -> String {
+    let f = DateFormatter()
+    f.dateFormat = "MMM yyyy"
     return f.string(from: Date())
 }
 

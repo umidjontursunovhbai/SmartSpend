@@ -48,8 +48,11 @@ class DataManager: ObservableObject {
     @Published var selectedTimePeriod: TimePeriod = .currentMonth
     @Published var customStartDate: Date = Date()
     @Published var customEndDate: Date = Date()
+    @Published var cloudSyncState: CloudSyncState = .idle
 
     private let sharedDefaults = UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? UserDefaults.standard
+    private var dataLastChangedAt: Date = Date()
+    private var isApplyingRemoteSnapshot = false
 
     private init() {
         self.user = User(currency: .usd, language: .english)
@@ -62,6 +65,10 @@ class DataManager: ObservableObject {
     private func saveData() {
         do {
             let encoder = JSONEncoder()
+
+            if !isApplyingRemoteSnapshot {
+                dataLastChangedAt = Date()
+            }
             
             // Save to local UserDefaults
             let expensesData = try encoder.encode(expenses)
@@ -94,6 +101,7 @@ class DataManager: ObservableObject {
             // Save custom date range
             sharedDefaults.set(customStartDate, forKey: "customStartDate")
             sharedDefaults.set(customEndDate, forKey: "customEndDate")
+            sharedDefaults.set(dataLastChangedAt, forKey: "dataLastChangedAt")
             
         } catch {
             print("Error saving data: \(error)")
@@ -148,6 +156,10 @@ class DataManager: ObservableObject {
            let decodedUserCategories = try? decoder.decode([UserCategory].self, from: userCategoriesData) {
             self.userCategories = decodedUserCategories
         }
+
+        if let savedDataLastChangedAt = sharedDefaults.object(forKey: "dataLastChangedAt") as? Date {
+            self.dataLastChangedAt = savedDataLastChangedAt
+        }
         
         // No longer auto-creating default categories.
         // Categories must be explicitly created by the user or imported.
@@ -162,6 +174,65 @@ class DataManager: ObservableObject {
         
         // Rebuild patterns from recent expenses on app launch
         rebuildLearnedPatternsFromRecentExpenses()
+    }
+
+    // MARK: - iCloud Sync
+
+    var syncSnapshot: SmartSpendSyncSnapshot {
+        SmartSpendSyncSnapshot(
+            schemaVersion: 1,
+            updatedAt: dataLastChangedAt,
+            expenses: expenses,
+            user: user,
+            deletedExpenses: deletedExpenses,
+            categoryBudgets: categoryBudgets,
+            spendingGoals: spendingGoals,
+            monthlySalaries: monthlySalaries,
+            recurringExpenses: recurringExpenses,
+            learnedPatterns: learnedPatterns,
+            userCategories: userCategories,
+            customStartDate: customStartDate,
+            customEndDate: customEndDate
+        )
+    }
+
+    @MainActor
+    func checkICloudSyncStatus() async {
+        cloudSyncState = .checking
+        cloudSyncState = await CloudSyncService.shared.checkAccountStatus()
+    }
+
+    @MainActor
+    func syncWithICloud() async {
+        cloudSyncState = .syncing
+
+        do {
+            let syncedSnapshot = try await CloudSyncService.shared.sync(localSnapshot: syncSnapshot)
+            applySyncSnapshot(syncedSnapshot)
+            cloudSyncState = .synced(Date())
+        } catch {
+            cloudSyncState = .failed(CloudSyncService.shared.syncMessage(for: error))
+        }
+    }
+
+    private func applySyncSnapshot(_ snapshot: SmartSpendSyncSnapshot) {
+        isApplyingRemoteSnapshot = true
+        defer { isApplyingRemoteSnapshot = false }
+
+        expenses = snapshot.expenses
+        user = snapshot.user
+        deletedExpenses = snapshot.deletedExpenses
+        categoryBudgets = snapshot.categoryBudgets
+        spendingGoals = snapshot.spendingGoals
+        monthlySalaries = snapshot.monthlySalaries
+        recurringExpenses = snapshot.recurringExpenses
+        learnedPatterns = snapshot.learnedPatterns
+        userCategories = snapshot.userCategories
+        customStartDate = snapshot.customStartDate
+        customEndDate = snapshot.customEndDate
+        dataLastChangedAt = snapshot.updatedAt
+
+        saveData()
     }
     
     // MARK: - Expense Management

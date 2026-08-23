@@ -285,6 +285,7 @@ extension String {
             "support": "Support",
             "ai_chat": "AI Support Chat",
             "email_us": "Email Support",
+            "privacy_policy": "Privacy Policy",
             "chat_placeholder": "How can I help you today?",
             "support_agent_name": "SmartSpend AI",
             "support_agent_status": "Always Active",

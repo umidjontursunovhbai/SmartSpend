@@ -7,6 +7,7 @@ struct AnalyticsView: View {
     @State private var periodOffset: Int = 0  // 0 = current, 1 = previous, ...
     @State private var compareOption: CompareOption = .previousPeriod
     @State private var showingBudgetSettings = false
+    @State private var selectedHistoryMonth: MonthBar?
 
 
     enum TimeFrame: String, CaseIterable {
@@ -185,6 +186,16 @@ struct AnalyticsView: View {
                     .cornerRadius(4)
                 }
             }
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(.clear)
+                        .contentShape(Rectangle())
+                        .onTapGesture { location in
+                            selectHistoryMonth(at: location, proxy: proxy, geometry: geometry)
+                        }
+                }
+            }
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 6)) { value in
                     AxisValueLabel().font(.caption2)
@@ -209,6 +220,22 @@ struct AnalyticsView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if let selectedHistoryMonth {
+                MonthHistoryPopup(
+                    month: selectedHistoryMonth,
+                    currency: dataManager.user.currency
+                )
+                .padding(.top, 42)
+                .padding(.trailing, 12)
+                .transition(.scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity))
+                .onTapGesture {
+                    withAnimation(.snappy) {
+                        self.selectedHistoryMonth = nil
+                    }
+                }
             }
         }
         .cardStyle()
@@ -416,11 +443,11 @@ struct AnalyticsView: View {
                 }
             }
 
-            if dailySpendingPoints.isEmpty {
+            if spendingTrendPoints.isEmpty {
                 emptyState
             } else {
                 Chart {
-                    ForEach(dailySpendingPoints) { point in
+                    ForEach(spendingTrendPoints) { point in
                         AreaMark(
                             x: .value("Date", point.date),
                             y: .value("Amount", point.amount)
@@ -437,11 +464,27 @@ struct AnalyticsView: View {
                         .interpolationMethod(.catmullRom)
                     }
                 }
+                .chartYScale(domain: 0...spendingTrendYAxisMax)
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: selectedTimeframe == .week ? 7 : 5))
+                    AxisMarks(values: .automatic(desiredCount: selectedTimeframe == .year ? 6 : selectedTimeframe == .week ? 7 : 5)) { value in
+                        AxisGridLine().foregroundStyle(Color(.systemGray6))
+                        AxisTick().foregroundStyle(Color(.systemGray4))
+                        AxisValueLabel(format: selectedTimeframe == .year ? .dateTime.month(.abbreviated) : .dateTime.day().month(.abbreviated))
+                            .font(.caption2)
+                    }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading)
+                    AxisMarks(position: .leading, values: spendingTrendYAxisValues) { value in
+                        AxisGridLine().foregroundStyle(Color(.systemGray5))
+                        AxisTick().foregroundStyle(Color(.systemGray4))
+                        AxisValueLabel {
+                            if let raw = value.as(Double.self) {
+                                Text(CurrencyFormatter.formatChartCompact(raw, currency: dataManager.user.currency))
+                                    .font(.caption2)
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
                 }
                 .frame(height: 200)
             }
@@ -718,14 +761,65 @@ struct AnalyticsView: View {
     private var hasAnyHistoricalData: Bool {
         last12Months.contains { $0.amount > 0 }
     }
+
+    private func selectHistoryMonth(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
+        guard let plotFrame = proxy.plotFrame else { return }
+        let frame = geometry[plotFrame]
+        guard frame.contains(location) else { return }
+
+        let xPosition = location.x - frame.origin.x
+        guard let monthLabel = proxy.value(atX: xPosition, as: String.self),
+              let month = last12Months.first(where: { $0.label == monthLabel }) else { return }
+
+        withAnimation(.snappy) {
+            selectedHistoryMonth = month
+        }
+    }
     
-    private var dailySpendingPoints: [DailySpendingPoint] {
+    private var spendingTrendPoints: [DailySpendingPoint] {
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: currentPeriodExpenses) { calendar.startOfDay(for: $0.date) }
+        let grouped = Dictionary(grouping: currentPeriodExpenses) { expense in
+            if selectedTimeframe == .year {
+                return calendar.date(from: calendar.dateComponents([.year, .month], from: expense.date)) ?? calendar.startOfDay(for: expense.date)
+            }
+            return calendar.startOfDay(for: expense.date)
+        }
+
         return grouped.map { date, expenses in
             DailySpendingPoint(date: date, amount: expenses.reduce(0) { $0 + $1.amount })
         }
         .sorted { $0.date < $1.date }
+    }
+
+    private var spendingTrendYAxisMax: Double {
+        let maxAmount = spendingTrendPoints.map(\.amount).max() ?? 0
+        guard maxAmount > 0 else { return 1 }
+        return niceChartMaximum(for: maxAmount)
+    }
+
+    private var spendingTrendYAxisValues: [Double] {
+        let maxValue = spendingTrendYAxisMax
+        return (0...4).map { maxValue * Double($0) / 4.0 }
+    }
+
+    private func niceChartMaximum(for value: Double) -> Double {
+        let exponent = floor(log10(value))
+        let magnitude = pow(10, exponent)
+        let normalized = value / magnitude
+
+        let rounded: Double
+        switch normalized {
+        case ...1:
+            rounded = 1
+        case ...2:
+            rounded = 2
+        case ...5:
+            rounded = 5
+        default:
+            rounded = 10
+        }
+
+        return rounded * magnitude
     }
     
     private var peakSpendingDays: [PeakSpendingDay] {
@@ -790,6 +884,40 @@ private struct AnalyticsCard: ViewModifier {
 
 private extension View {
     func cardStyle() -> some View { modifier(AnalyticsCard()) }
+}
+
+private struct MonthHistoryPopup: View {
+    let month: AnalyticsView.MonthBar
+    let currency: Currency
+
+    private var monthTitle: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter.string(from: month.monthStart)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(monthTitle)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(CurrencyFormatter.format(month.amount, currency: currency))
+                .font(.subheadline.weight(.bold))
+                .fontDesign(.rounded)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(.separator).opacity(0.35), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 6)
+        .accessibilityElement(children: .combine)
+    }
 }
 
 // MARK: - Supporting Views

@@ -64,6 +64,38 @@ struct CurrencyFormatter {
         return "\(Int(amount)) \(currency.symbol)"
     }
 
+    static func formatChartCompact(_ amount: Double, currency: Currency) -> String {
+        let absolute = abs(amount)
+        let sign = amount < 0 ? "-" : ""
+        let suffix: String
+        let value: Double
+
+        switch absolute {
+        case 1_000_000_000...:
+            value = absolute / 1_000_000_000
+            suffix = "B"
+        case 1_000_000...:
+            value = absolute / 1_000_000
+            suffix = "M"
+        case 1_000...:
+            value = absolute / 1_000
+            suffix = "K"
+        default:
+            value = absolute
+            suffix = ""
+        }
+
+        let decimals = value >= 10 || value.rounded() == value ? 0 : 1
+        let number = String(format: "%.\(decimals)f", value)
+
+        switch currency {
+        case .uzs:
+            return "\(sign)\(number)\(suffix) so'm"
+        default:
+            return "\(sign)\(currency.rawValue) \(number)\(suffix)"
+        }
+    }
+
     static func formatPercentage(_ value: Double) -> String {
         percentFormatter.string(from: NSNumber(value: value)) ?? "\(Int(value * 100))%"
     }

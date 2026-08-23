@@ -7,21 +7,10 @@ struct SmartSpendControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: "com.tursunov.SmartSpend.AddExpense") {
             ControlWidgetButton(action: OpenAddExpenseIntent()) {
-                Label("Add Expense", systemImage: "banknote.fill")
+                Label("Quick Add", systemImage: "plus.circle.fill")
             }
         }
-        .displayName("Add Expense")
-        .description("Quickly log a new expense in SmartSpend")
-    }
-}
-
-struct OpenAddExpenseIntent: AppIntent {
-    static var title: LocalizedStringResource = "Add Expense"
-    static var openAppWhenRun: Bool = true
-
-    func perform() async throws -> some IntentResult {
-        let defaults = UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? UserDefaults.standard
-        defaults.set(true, forKey: "openAddExpense")
-        return .result()
+        .displayName("SmartSpend Quick Add")
+        .description("Open SmartSpend to add a new expense")
     }
 }

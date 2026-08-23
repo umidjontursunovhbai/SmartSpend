@@ -94,6 +94,11 @@
 			path = Widget;
 			sourceTree = "<group>";
 		};
+		CE1000010000000000000001 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -138,6 +143,7 @@
 				9E6DB8722E59C60A00476BE0 /* SmartSpendTests */,
 				9E6DB87C2E59C60A00476BE0 /* SmartSpendUITests */,
 				C66B612B2FAC6F6600C81E92 /* Widget */,
+				CE1000010000000000000001 /* Shared */,
 				9E6DB8DA2E5A06A500476BE0 /* Frameworks */,
 				9E6DB8632E59C60700476BE0 /* Products */,
 			);
@@ -193,6 +199,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				9E6DB8642E59C60700476BE0 /* SmartSpend */,
+				CE1000010000000000000001 /* Shared */,
 			);
 			name = SmartSpend;
 			packageProductDependencies = (
@@ -261,6 +268,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				C66B612B2FAC6F6600C81E92 /* Widget */,
+				CE1000010000000000000001 /* Shared */,
 			);
 			name = WidgetExtension;
 			packageProductDependencies = (
@@ -535,8 +543,6 @@
 				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "SmartSpend needs camera access to scan your receipts";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartSpend needs access to your gallery to import receipt photos";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -566,8 +572,6 @@
 				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "SmartSpend needs camera access to scan your receipts";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartSpend needs access to your gallery to import receipt photos";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -671,7 +675,7 @@
 				INFOPLIST_FILE = Widget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Widget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -703,7 +707,7 @@
 				INFOPLIST_FILE = Widget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Widget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

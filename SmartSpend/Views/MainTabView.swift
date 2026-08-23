@@ -42,6 +42,9 @@ struct MainTabView: View {
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView()
         }
+        .onAppear {
+            checkAddExpenseIntent()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 checkAddExpenseIntent()
@@ -53,7 +56,10 @@ struct MainTabView: View {
         let defaults = UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? UserDefaults.standard
         guard defaults.bool(forKey: "openAddExpense") else { return }
         defaults.removeObject(forKey: "openAddExpense")
-        showingAddExpense = true
+        tabManager.switchToExpensesTab()
+        DispatchQueue.main.async {
+            showingAddExpense = true
+        }
     }
 }
 
@@ -66,6 +72,7 @@ struct SettingsView: View {
     @State private var showingDataExport = false
     @State private var showingDataImport = false
     @State private var showingSupportChat = false
+    @State private var showingPrivacyPolicy = false
     @State private var showingAlert = false
     
     private var currentMonthSalaryText: String {
@@ -76,6 +83,11 @@ struct SettingsView: View {
     private var currentMonthSalaryColor: Color {
         let currentSalary = dataManager.getCurrentMonthSalary()
         return currentSalary > 0 ? .secondary : .orange
+    }
+
+    private var appVersionText: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0"
+        return "SmartSpend v\(version) • Privacy First"
     }
     
     var body: some View {
@@ -154,6 +166,14 @@ struct SettingsView: View {
                 // Section: Support
                 Section("support".localized) {
                     Button(action: {
+                        showingPrivacyPolicy = true
+                    }) {
+                        Label("privacy_policy".localized, systemImage: "hand.raised.fill")
+                            .foregroundStyle(Color(.systemBlue))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: {
                         if let url = URL(string: "mailto:tursunov.umidjon.uz@gmail.com") {
                             UIApplication.shared.open(url)
                         }
@@ -163,7 +183,7 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                
+
                 // Section: Data Control
                 Section("data_management".localized) {
                     Button(action: {
@@ -217,7 +237,7 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                
+
                 // Danger Zone at the bottom
                 Section {
                     Button(action: {
@@ -232,7 +252,7 @@ struct SettingsView: View {
                         }
                     }
                 } footer: {
-                    Text("SmartSpend v1.0 • Privacy First")
+                    Text(appVersionText)
                         .frame(maxWidth: .infinity)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -244,6 +264,9 @@ struct SettingsView: View {
             
             .sheet(isPresented: $showingSupportChat) {
                 SupportChatView()
+            }
+            .sheet(isPresented: $showingPrivacyPolicy) {
+                PrivacyPolicyView()
             }
 
             .sheet(isPresented: $showingMonthlySalary) {
@@ -277,7 +300,7 @@ struct SettingsView: View {
     private func clearAllData() {
         dataManager.clearAllData()
     }
-    
+
     private func formatCurrency(_ amount: Double, _ currency: Currency) -> String {
         return CurrencyFormatter.format(amount, currency: currency)
     }

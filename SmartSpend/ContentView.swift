@@ -28,7 +28,7 @@ struct ContentView: View {
                 }
                 .padding()
             } else {
-        MainTabView()
+                MainTabView()
             }
         }
         .onAppear {
