@@ -8,35 +8,18 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $tabManager.selectedTab) {
-            DashboardView()
-                .tabItem {
-                    Label("dashboard".localized, systemImage: "house.fill")
-                }
-                .tag(0)
-
-            ExpenseListView()
-                .tabItem {
-                    Label("expenses".localized, systemImage: "list.bullet.rectangle")
-                }
-                .tag(1)
-
-            AnalyticsView()
-                .tabItem {
-                    Label("analytics".localized, systemImage: "chart.bar.fill")
-                }
-                .tag(2)
-
-            RecurringExpensesView()
-                .tabItem {
-                    Label("recurring".localized, systemImage: "repeat")
-                }
-                .tag(3)
-
-            SettingsView()
-                .tabItem {
-                    Label("settings".localized, systemImage: "gear")
-                }
-                .tag(4)
+            Tab("dashboard", image: "hero-home", value: 0) {
+                DashboardView()
+            }
+            Tab("expenses", image: "hero-list-bullet", value: 1) {
+                ExpenseListView()
+            }
+            Tab("recurring", image: "hero-arrow-path", value: 2) {
+                RecurringExpensesView()
+            }
+            Tab("settings", image: "hero-cog-6-tooth", value: 3) {
+                SettingsView()
+            }
         }
         .tint(Color(.systemBlue))
         .sheet(isPresented: $showingAddExpense) {
@@ -45,8 +28,12 @@ struct MainTabView: View {
         .onAppear {
             checkAddExpenseIntent()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .smartSpendOpenAddExpense)) { _ in
+            checkAddExpenseIntent()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
+                dataManager.reloadFromSharedStorage()
                 checkAddExpenseIntent()
             }
         }
@@ -71,7 +58,6 @@ struct SettingsView: View {
     @State private var showingDeletedExpenses = false
     @State private var showingDataExport = false
     @State private var showingDataImport = false
-    @State private var showingSupportChat = false
     @State private var showingPrivacyPolicy = false
     @State private var showingAlert = false
     
@@ -92,179 +78,20 @@ struct SettingsView: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                // Section: Profile & Settings
-                Section("profile".localized) {
-                    Button(action: {
-                        showingMonthlySalary = true
-                    }) {
-                        HStack {
-                            Label("monthly_salaries".localized, systemImage: "calendar.badge.plus")
-                                .foregroundStyle(Color(.systemBlue))
-                            
-                            Spacer()
-                            
-                            Text(currentMonthSalaryText)
-                                .fontWeight(.medium)
-                                .foregroundStyle(currentMonthSalaryColor)
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.vertical, 4)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button(action: {
-                        showingCurrencySelection = true
-                    }) {
-                        HStack {
-                            Label("currency".localized, systemImage: "creditcard.fill")
-                                .foregroundStyle(Color(.systemBlue))
-                            
-                            Spacer()
-                            
-                            Text(dataManager.user.currency.rawValue)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.secondary)
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.vertical, 4)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                
-                // Section: App Features
-                Section("features".localized) {
-                    NavigationLink(destination: BudgetSettingsView()) {
-                        Label("budget_goals".localized, systemImage: "target")
-                            .foregroundStyle(Color(.systemGreen))
-                    }
-                    NavigationLink(destination: CategoryManagementView()) {
-                        Label("categories".localized, systemImage: "tag.fill")
-                            .foregroundStyle(Color(.systemOrange))
-                    }
-                    Button(action: { showingSupportChat = true }) {
-                        HStack {
-                            Label("Insights", systemImage: "chart.bar.doc.horizontal")
-                                .foregroundStyle(Color(.systemIndigo))
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
+            ZStack {
+                Color.white
+                    .ignoresSafeArea()
 
-                // Section: Support
-                Section("support".localized) {
-                    Button(action: {
-                        showingPrivacyPolicy = true
-                    }) {
-                        Label("privacy_policy".localized, systemImage: "hand.raised.fill")
-                            .foregroundStyle(Color(.systemBlue))
-                    }
-                    .buttonStyle(.plain)
+                VStack(spacing: 0) {
+                    AppScreenHeader("settings".localized)
 
-                    Button(action: {
-                        if let url = URL(string: "mailto:tursunov.umidjon.uz@gmail.com") {
-                            UIApplication.shared.open(url)
-                        }
-                    }) {
-                        Label("email_us".localized, systemImage: "envelope.fill")
-                            .foregroundStyle(Color(.systemBlue))
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // Section: Data Control
-                Section("data_management".localized) {
-                    Button(action: {
-                        showingDataImport = true
-                    }) {
-                        HStack {
-                            Label("import_data".localized, systemImage: "square.and.arrow.down")
-                                .foregroundStyle(Color(.systemBlue))
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button(action: {
-                        showingDataExport = true
-                    }) {
-                        HStack {
-                            Label("export_data".localized, systemImage: "square.and.arrow.up")
-                                .foregroundStyle(Color(.systemGreen))
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button(action: {
-                        showingDeletedExpenses = true
-                    }) {
-                        HStack {
-                            Label("deleted_expenses".localized, systemImage: "trash.fill")
-                                .foregroundStyle(Color(.systemBlue))
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // Danger Zone at the bottom
-                Section {
-                    Button(action: {
-                        showingAlert = true
-                    }) {
-                        HStack {
-                            Spacer()
-                            Text("clear_all_data".localized)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.red)
-                            Spacer()
-                        }
-                    }
-                } footer: {
-                    Text(appVersionText)
-                        .frame(maxWidth: .infinity)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .padding(.top, 8)
+                    settingsContent
                 }
             }
-            .navigationTitle("settings".localized)
-            .navigationBarTitleDisplayMode(.large)
-            
-            .sheet(isPresented: $showingSupportChat) {
-                SupportChatView()
-            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
+
             .sheet(isPresented: $showingPrivacyPolicy) {
                 PrivacyPolicyView()
             }
@@ -296,13 +123,320 @@ struct SettingsView: View {
             }
         }
     }
-    
+
+    private var settingsContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 26) {
+                moneySetupPanel
+
+                settingsGroup("planning".localized) {
+                    NavigationLink(destination: BudgetSettingsView()) {
+                        settingsRowContent(
+                            icon: "flag",
+                            title: "budget_goals".localized,
+                            tint: Color(.systemGreen)
+                        )
+                    }
+                    .buttonStyle(SettingsPressStyle())
+
+                    settingsDivider
+
+                    NavigationLink(destination: CategoryManagementView()) {
+                        settingsRowContent(
+                            icon: "tag",
+                            title: "categories".localized,
+                            tint: Color(.systemOrange)
+                        )
+                    }
+                    .buttonStyle(SettingsPressStyle())
+                }
+
+                settingsGroup("data_management".localized) {
+                    settingsButtonRow(
+                        icon: "arrow-down-tray",
+                        title: "import_data".localized,
+                        tint: Color(.systemBlue)
+                    ) {
+                        showingDataImport = true
+                    }
+
+                    settingsDivider
+
+                    settingsButtonRow(
+                        icon: "arrow-up-tray",
+                        title: "export_data".localized,
+                        tint: Color(.systemGreen)
+                    ) {
+                        showingDataExport = true
+                    }
+
+                    settingsDivider
+
+                    settingsButtonRow(
+                        icon: "archive-box",
+                        title: "deleted_expenses".localized,
+                        tint: Color(.systemGray)
+                    ) {
+                        showingDeletedExpenses = true
+                    }
+                }
+
+                settingsGroup("support".localized) {
+                    settingsButtonRow(
+                        icon: "hand-raised",
+                        title: "privacy_policy".localized,
+                        tint: Color(.systemIndigo)
+                    ) {
+                        showingPrivacyPolicy = true
+                    }
+
+                    settingsDivider
+
+                    settingsButtonRow(
+                        icon: "envelope",
+                        title: "email_us".localized,
+                        tint: Color(.systemBlue),
+                        showsChevron: false
+                    ) {
+                        if let url = URL(string: "mailto:tursunov.umidjon.uz@gmail.com") {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                }
+
+                destructiveAction
+
+                Text(appVersionText)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
+        }
+        .scrollIndicators(.hidden)
+        .background(Color.white)
+    }
+
+    private var moneySetupPanel: some View {
+        VStack(spacing: 0) {
+            Button {
+                showingMonthlySalary = true
+            } label: {
+                HStack(alignment: .center, spacing: 14) {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color(.systemBlue))
+                        .frame(width: 4, height: 52)
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("monthly_salaries".localized)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+
+                        Text(currentMonthSalaryText)
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                            .foregroundStyle(currentMonthSalaryColor)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.62)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    HeroIcon("chevron-right", size: 14)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SettingsPressStyle())
+
+            Divider()
+                .padding(.leading, 36)
+
+            Button {
+                showingCurrencySelection = true
+            } label: {
+                HStack(spacing: 13) {
+                    HeroIcon("credit-card", size: 21)
+                        .foregroundStyle(Color(.systemTeal))
+                        .frame(width: 24)
+
+                    Text("currency".localized)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+
+                    Spacer(minLength: 12)
+
+                    Text(dataManager.user.currency.rawValue)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .monospaced()
+
+                    HeroIcon("chevron-right", size: 13)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, minHeight: 56)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SettingsPressStyle())
+        }
+        .liquidGlassCard(cornerRadius: 22)
+    }
+
+    private func settingsGroup<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
+            VStack(spacing: 0) {
+                content()
+            }
+            .background(
+                Color(.secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .stroke(Color(.separator).opacity(0.14), lineWidth: 1)
+            }
+        }
+    }
+
+    private var settingsDivider: some View {
+        Divider()
+            .padding(.leading, 53)
+            .padding(.trailing, 16)
+    }
+
+    private func settingsButtonRow(
+        icon: String,
+        title: String,
+        tint: Color,
+        trailing: String? = nil,
+        trailingColor: Color = .secondary,
+        showsChevron: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            settingsRowContent(
+                icon: icon,
+                title: title,
+                tint: tint,
+                trailing: trailing,
+                trailingColor: trailingColor,
+                showsChevron: showsChevron
+            )
+        }
+        .buttonStyle(SettingsPressStyle())
+    }
+
+    private func settingsRowContent(
+        icon: String,
+        title: String,
+        tint: Color,
+        trailing: String? = nil,
+        trailingColor: Color = .secondary,
+        showsChevron: Bool = true
+    ) -> some View {
+        HStack(spacing: 13) {
+            HeroIcon(icon, size: 21)
+                .foregroundStyle(tint)
+                .frame(width: 24)
+
+            Text(title)
+                .font(.body.weight(.medium))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 12)
+
+            if let trailing {
+                Text(trailing)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(trailingColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+            }
+
+            if showsChevron {
+                HeroIcon(systemName: "chevron.right", size: 13)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var destructiveAction: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Button {
+                showingAlert = true
+            } label: {
+                HStack(spacing: 13) {
+                    HeroIcon("trash", size: 21)
+                        .frame(width: 24)
+
+                    Text("clear_all_data".localized)
+                        .font(.body.weight(.semibold))
+
+                    Spacer()
+                }
+                .foregroundStyle(Color(.systemRed))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, minHeight: 56)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SettingsPressStyle())
+            .background(
+                Color(.systemRed).opacity(0.06),
+                in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .stroke(Color(.systemRed).opacity(0.16), lineWidth: 1)
+            }
+
+            Text("clear_all_data_message".localized)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
+        }
+    }
+
     private func clearAllData() {
         dataManager.clearAllData()
     }
 
     private func formatCurrency(_ amount: Double, _ currency: Currency) -> String {
         return CurrencyFormatter.format(amount, currency: currency)
+    }
+}
+
+private struct SettingsPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.58 : 1)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.12),
+                value: configuration.isPressed
+            )
     }
 }
 

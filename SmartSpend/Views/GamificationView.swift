@@ -58,7 +58,7 @@ struct UserLevelCard: View {
                 
                 Spacer()
                 
-                Image(systemName: userLevel.levelIcon)
+                HeroIcon(systemName: userLevel.levelIcon)
                     .font(.system(size: 40))
                     .foregroundColor(.yellow)
             }
@@ -99,7 +99,7 @@ struct StreakCard: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack {
-                Label("expense_streak".localized, systemImage: "flame.fill")
+                HeroIconLabel(title: "expense_streak".localized, systemName: "flame.fill")
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundColor(.orange)
@@ -160,7 +160,7 @@ struct RecentAchievementsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("recently_unlocked".localized, systemImage: "star.fill")
+                HeroIconLabel(title: "recently_unlocked".localized, systemName: "star.fill")
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundColor(.yellow)
@@ -174,7 +174,7 @@ struct RecentAchievementsCard: View {
             
             ForEach(achievements) { achievement in
                 HStack {
-                    Image(systemName: achievement.icon)
+                    HeroIcon(systemName: achievement.icon)
                         .font(.title2)
                         .foregroundColor(achievement.category.color)
                         .frame(width: 30)
@@ -191,7 +191,7 @@ struct RecentAchievementsCard: View {
                     
                     Spacer()
                     
-                    Image(systemName: "checkmark.circle.fill")
+                    HeroIcon(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
                 }
                 .padding(.vertical, 4)
@@ -241,7 +241,7 @@ struct AchievementsSection: View {
                     HStack {
                         Text(selectedCategory?.rawValue ?? "all".localized)
                             .font(.caption)
-                        Image(systemName: "chevron.down")
+                        HeroIcon(systemName: "chevron.down")
                             .font(.caption2)
                     }
                     .foregroundColor(.blue)
@@ -267,14 +267,14 @@ struct AchievementCard: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Image(systemName: achievement.icon)
+                HeroIcon(systemName: achievement.icon)
                     .font(.title2)
                     .foregroundColor(achievement.isUnlocked ? achievement.category.color : .gray)
                 
                 Spacer()
                 
                 if achievement.isUnlocked {
-                    Image(systemName: "checkmark.circle.fill")
+                    HeroIcon(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
                         .font(.caption)
                 }

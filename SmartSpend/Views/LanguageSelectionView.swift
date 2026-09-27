@@ -80,7 +80,7 @@ struct LanguageRowView: View {
                 Spacer()
                 
                 if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
+                    HeroIcon(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.tint)
                         .font(.title3)
                 }

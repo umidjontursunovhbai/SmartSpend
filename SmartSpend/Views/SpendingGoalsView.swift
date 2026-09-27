@@ -8,7 +8,7 @@ struct SpendingGoalsView: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack {
-                Label("Spending Goals", systemImage: "target")
+                HeroIconLabel(title: "Spending Goals", systemName: "target")
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
@@ -16,10 +16,12 @@ struct SpendingGoalsView: View {
                 Spacer()
                 
                 Button(action: { showingBudgetSettings = true }) {
-                    Image(systemName: "plus.circle.fill")
+                    HeroIcon(systemName: "plus.circle.fill")
                         .font(.title3)
                         .foregroundStyle(.tint)
+                        .iOSMinimumTapTarget()
                 }
+                .liquidGlassButtonStyle()
             }
             
             LazyVStack(spacing: 12) {
@@ -35,21 +37,21 @@ struct SpendingGoalsView: View {
                                 .fontWeight(.medium)
                                 .foregroundStyle(.tint)
                             Spacer()
-                            Image(systemName: "arrow.right")
+                            HeroIcon(systemName: "arrow.right")
                                 .font(.caption)
                                 .foregroundStyle(.tint)
                         }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                        .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
+                        .liquidGlassSurface(RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.small, style: .continuous))
                     }
-                    .buttonStyle(.plain)
+                    .liquidGlassButtonStyle()
                 }
             }
         }
-        .padding(.vertical, 20)
-        .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.vertical, iOSDesignSystem.Spacing.large)
+        .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
+        .liquidGlassCard()
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
         .sheet(isPresented: $showingBudgetSettings) {
             BudgetSettingsView()
@@ -64,12 +66,20 @@ struct GoalProgressRow: View {
     private var category: UserCategory {
         dataManager.resolveCategory(id: goal.categoryId)
     }
+
+    private func dashboardAmount(_ amount: Double) -> String {
+        let currency = dataManager.user.currency
+        if currency == .uzs {
+            return CurrencyFormatter.formatCompact(amount, currency: currency)
+        }
+        return CurrencyFormatter.format(amount, currency: currency)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 // Category Icon
-                Image(systemName: category.iconSystemName)
+                HeroIcon(systemName: category.iconSystemName)
                     .font(.caption)
                     .foregroundStyle(category.color)
                     .frame(width: 24, height: 24)
@@ -81,7 +91,7 @@ struct GoalProgressRow: View {
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
                     
-                    Text("\(category.name) • Target: \(CurrencyFormatter.format(goal.targetAmount, currency: dataManager.user.currency))")
+                    Text("\(category.name) • Target: \(dashboardAmount(goal.targetAmount))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -89,7 +99,7 @@ struct GoalProgressRow: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(CurrencyFormatter.format(goal.currentAmount, currency: dataManager.user.currency))
+                    Text(dashboardAmount(goal.currentAmount))
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(goal.isCompleted ? .green : .primary)

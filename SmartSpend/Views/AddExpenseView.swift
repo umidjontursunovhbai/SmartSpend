@@ -66,7 +66,7 @@ struct AddExpenseView: View {
                                     Label {
                                         Text(userCategory.name)
                                     } icon: {
-                                        Image(systemName: userCategory.iconSystemName)
+                                        HeroIcon(systemName: userCategory.iconSystemName)
                                     }
                                 }
                             }
@@ -75,12 +75,12 @@ struct AddExpenseView: View {
                             
                             // Create New Category
                             Button(action: { showingCategoryManagement = true }) {
-                                Label("create_new_category".localized, systemImage: "plus.circle")
+                                HeroIconLabel(title: "create_new_category".localized, systemName: "plus.circle")
                             }
                         } label: {
                             HStack(spacing: 4) {
                                 if let userCat = selectedCategory {
-                                    Image(systemName: userCat.iconSystemName)
+                                    HeroIcon(systemName: userCat.iconSystemName)
                                         .foregroundStyle(userCat.color)
                                     Text(userCat.name)
                                         .foregroundStyle(.primary)
@@ -88,7 +88,7 @@ struct AddExpenseView: View {
                                     Text("select_category".localized)
                                         .foregroundStyle(.secondary)
                                 }
-                                Image(systemName: "chevron.up.chevron.down")
+                                HeroIcon(systemName: "chevron.up.chevron.down")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -193,7 +193,7 @@ struct SmartSuggestionChips: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                Image(systemName: "sparkles")
+                HeroIcon(systemName: "sparkles")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
@@ -210,7 +210,7 @@ struct SmartSuggestionChips: View {
                         onCategory(item.category)
                     } content: {
                         HStack(spacing: 4) {
-                            Image(systemName: item.category.iconSystemName)
+                            HeroIcon(systemName: item.category.iconSystemName)
                                 .foregroundStyle(item.category.color)
                             Text(item.category.name)
                         }
@@ -226,12 +226,12 @@ struct SmartSuggestionChips: View {
         Button(action: action) {
             content()
                 .font(.caption.weight(.medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color(.systemGray6), in: Capsule())
+                .padding(.horizontal, iOSDesignSystem.Spacing.medium)
+                .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                .liquidGlassSurface(Capsule())
                 .foregroundStyle(.primary)
         }
-        .buttonStyle(.plain)
+        .liquidGlassButtonStyle()
     }
 }
 

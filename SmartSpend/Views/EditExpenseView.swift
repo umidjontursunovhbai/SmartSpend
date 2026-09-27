@@ -57,7 +57,7 @@ struct EditExpenseView: View {
                                     Label {
                                         Text(userCategory.name)
                                     } icon: {
-                                        Image(systemName: userCategory.iconSystemName)
+                                        HeroIcon(systemName: userCategory.iconSystemName)
                                     }
                                 }
                             }
@@ -66,12 +66,12 @@ struct EditExpenseView: View {
                             
                             // Create New Category
                             Button(action: { showingCategoryManagement = true }) {
-                                Label("Create New Category", systemImage: "plus.circle")
+                                HeroIconLabel(title: "Create New Category", systemName: "plus.circle")
                             }
                         } label: {
                             HStack(spacing: 4) {
                                 if let userCat = selectedCategory {
-                                    Image(systemName: userCat.iconSystemName)
+                                    HeroIcon(systemName: userCat.iconSystemName)
                                         .foregroundStyle(userCat.color)
                                     Text(userCat.name)
                                         .foregroundStyle(.primary)
@@ -79,7 +79,7 @@ struct EditExpenseView: View {
                                     Text("Select Category")
                                         .foregroundStyle(.secondary)
                                 }
-                                Image(systemName: "chevron.up.chevron.down")
+                                HeroIcon(systemName: "chevron.up.chevron.down")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

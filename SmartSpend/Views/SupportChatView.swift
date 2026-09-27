@@ -35,7 +35,7 @@ struct SupportChatView: View {
                 Section("Insights") {
                     ForEach(insights) { insight in
                         HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: insight.icon)
+                            HeroIcon(systemName: insight.icon)
                                 .foregroundStyle(insight.iconColor)
                                 .frame(width: 24)
                                 .padding(.top, 1)

@@ -176,6 +176,10 @@ class DataManager: ObservableObject {
         rebuildLearnedPatternsFromRecentExpenses()
     }
 
+    func reloadFromSharedStorage() {
+        loadData()
+    }
+
     // MARK: - iCloud Sync
 
     var syncSnapshot: SmartSpendSyncSnapshot {
@@ -317,6 +321,16 @@ class DataManager: ObservableObject {
     func getTotalExpenses() -> Double {
         return expenses.reduce(0) { $0 + $1.amount }
     }
+
+    func getCurrentMonthExpenses(on date: Date = Date()) -> [Expense] {
+        let interval = BudgetPeriodCalculator.monthInterval(containing: date)
+        return BudgetPeriodCalculator.expenses(expenses, in: interval)
+    }
+
+    func getCurrentMonthExpensesTotal(on date: Date = Date()) -> Double {
+        let interval = BudgetPeriodCalculator.monthInterval(containing: date)
+        return BudgetPeriodCalculator.total(for: expenses, in: interval)
+    }
     
     func getCurrentMonthSalary() -> Double {
         let calendar = Calendar.current
@@ -336,8 +350,16 @@ class DataManager: ObservableObject {
     
     func getRemainingBudget() -> Double {
         let currentSalary = getCurrentMonthSalary()
-        let totalExpenses = getTotalExpenses()
-        return currentSalary - totalExpenses
+        return currentSalary - getCurrentMonthExpensesTotal()
+    }
+
+    func getSpendableTodaySnapshot(on date: Date = Date()) -> SpendableTodaySnapshot {
+        BudgetPeriodCalculator.spendableToday(
+            monthlyIncome: getCurrentMonthSalary(),
+            expenses: expenses,
+            recurringExpenses: recurringExpenses,
+            on: date
+        )
     }
     
     func getExpensesByCategory() -> [UserCategory: Double] {
@@ -776,9 +798,10 @@ class DataManager: ObservableObject {
     
     func checkBudgetAlerts() -> [String] {
         var alerts: [String] = []
+        let currentMonthExpenses = getCurrentMonthExpenses()
         
-        for budget in categoryBudgets {
-            let categoryExpenses = expenses.filter { $0.categoryId == budget.categoryId }
+        for budget in categoryBudgets where budget.isEnabled && budget.amount > 0 {
+            let categoryExpenses = currentMonthExpenses.filter { $0.categoryId == budget.categoryId }
             let totalSpent = categoryExpenses.reduce(0) { $0 + $1.amount }
             
             let category = resolveCategory(id: budget.categoryId)
@@ -796,20 +819,26 @@ class DataManager: ObservableObject {
     }
     
     func updateSpendingGoalProgress() {
-        // Update progress for all spending goals based on current expenses
-        for index in spendingGoals.indices {
-            let goal = spendingGoals[index]
-            let categoryExpenses = expenses.filter { $0.categoryId == goal.categoryId }
-            let totalSpent = categoryExpenses.reduce(0) { $0 + $1.amount }
-            
-            // Calculate progress as percentage
-            _ = min(totalSpent / goal.targetAmount, 1.0)
-            spendingGoals[index].currentAmount = totalSpent
-            
-            // Update the progress in the goal if it has a progress property
-            // Since SpendingGoal might not have a progress property, we'll just update currentAmount
+        guard !spendingGoals.isEmpty else { return }
+
+        let totalsByCategory = expenses.reduce(into: [UUID: Double]()) { totals, expense in
+            totals[expense.categoryId, default: 0] += expense.amount
         }
-        saveData()
+        var updatedGoals = spendingGoals
+        var didChange = false
+
+        for index in updatedGoals.indices {
+            let goal = updatedGoals[index]
+            let totalSpent = totalsByCategory[goal.categoryId, default: 0]
+            guard updatedGoals[index].currentAmount != totalSpent else { continue }
+            updatedGoals[index].currentAmount = totalSpent
+            didChange = true
+        }
+
+        if didChange {
+            spendingGoals = updatedGoals
+            saveData()
+        }
     }
     
     func getRecurringExpenseNotifications() -> [RecurringExpenseNotification] {

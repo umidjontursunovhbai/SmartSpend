@@ -114,7 +114,7 @@ struct CurrencyRowView: View {
                     .foregroundStyle(.secondary)
 
                 if isSelected {
-                    Image(systemName: "checkmark")
+                    HeroIcon(systemName: "checkmark")
                         .fontWeight(.semibold)
                         .foregroundStyle(.tint)
                 }

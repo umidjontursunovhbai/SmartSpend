@@ -22,12 +22,13 @@ enum AmountInputFormatter {
         guard value.isFinite else { return "" }
 
         let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = true
         formatter.groupingSeparator = ","
         formatter.decimalSeparator = "."
         formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = maxFractionDigits
-        formatter.locale = Locale(identifier: "en_US_POSIX")
 
         return formatter.string(from: NSNumber(value: value)) ?? ""
     }

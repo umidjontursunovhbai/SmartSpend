@@ -293,7 +293,7 @@ class DataExporter: ObservableObject {
         
         for expense in filteredExpenses.sorted(by: { $0.date > $1.date }) {
             let dateString = DateFormatter.exportDate.string(from: expense.date)
-            let amount = CurrencyFormatter.format(expense.amount, currency: dataManager.user.currency)
+            let amount = CurrencyFormatter.formatFull(expense.amount, currency: dataManager.user.currency)
             let categoryName = dataManager.resolveCategory(id: expense.categoryId).name
             text += "\(dateString) - \(expense.title) - \(amount) - \(categoryName)\n"
         }
@@ -306,7 +306,7 @@ class DataExporter: ObservableObject {
         text += "------------------\n"
         
         for recurring in dataManager.recurringExpenses {
-            let amount = CurrencyFormatter.format(recurring.amount, currency: dataManager.user.currency)
+            let amount = CurrencyFormatter.formatFull(recurring.amount, currency: dataManager.user.currency)
             let status = recurring.isActive ? "Active" : "Inactive"
             text += "\(recurring.title) - \(amount) - \(recurring.recurrenceType.rawValue) - \(status)\n"
         }

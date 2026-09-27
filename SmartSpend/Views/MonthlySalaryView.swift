@@ -42,7 +42,7 @@ struct MonthlySalaryView: View {
                 // Month navigator
                 HStack {
                     Button { stepMonth(by: -1) } label: {
-                        Image(systemName: "chevron.left")
+                        HeroIcon(systemName: "chevron.left")
                             .fontWeight(.semibold)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
@@ -58,7 +58,7 @@ struct MonthlySalaryView: View {
                     Spacer()
 
                     Button { stepMonth(by: 1) } label: {
-                        Image(systemName: "chevron.right")
+                        HeroIcon(systemName: "chevron.right")
                             .fontWeight(.semibold)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
@@ -160,7 +160,7 @@ private struct SalaryNumberPad: View {
                         Button { tap(key) } label: {
                             Group {
                                 if key == "⌫" {
-                                    Image(systemName: "delete.left")
+                                    HeroIcon(systemName: "delete.left")
                                         .font(.title3)
                                 } else {
                                     Text(key)

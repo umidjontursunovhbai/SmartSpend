@@ -21,7 +21,7 @@ struct DataExportView: View {
                 Section("export_data_types".localized) {
                     ForEach(DataExporter.ExportData.allCases, id: \.self) { dataType in
                         HStack {
-                            Image(systemName: dataType.icon)
+                            HeroIcon(systemName: dataType.icon)
                                 .foregroundColor(.blue)
                                 .frame(width: 20)
                             
@@ -30,7 +30,7 @@ struct DataExportView: View {
                             Spacer()
                             
                             if selectedDataTypes.contains(dataType) {
-                                Image(systemName: "checkmark")
+                                HeroIcon(systemName: "checkmark")
                                     .foregroundColor(.blue)
                             }
                         }
@@ -44,7 +44,7 @@ struct DataExportView: View {
                 Section("export_format_section".localized) {
                     ForEach(DataExporter.ExportFormat.allCases, id: \.self) { format in
                         HStack {
-                            Image(systemName: format.icon)
+                            HeroIcon(systemName: format.icon)
                                 .foregroundColor(.blue)
                                 .frame(width: 20)
                             
@@ -53,10 +53,10 @@ struct DataExportView: View {
                             Spacer()
                             
                             if selectedFormat == format {
-                                Image(systemName: "checkmark.circle.fill")
+                                HeroIcon(systemName: "checkmark.circle.fill")
                                     .foregroundColor(.blue)
                             } else {
-                                Image(systemName: "circle")
+                                HeroIcon(systemName: "circle")
                                     .foregroundColor(.gray)
                             }
                         }

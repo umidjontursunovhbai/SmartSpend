@@ -162,3 +162,6 @@ logs/
 
 # Claude Code local tooling
 .claude/
+
+# Local user exports and previews may contain private financial data.
+/outputs/

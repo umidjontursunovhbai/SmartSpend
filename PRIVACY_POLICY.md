@@ -1,45 +1,33 @@
 # SmartSpend Privacy Policy
 
-Effective date: August 23, 2026
+Effective date: September 27, 2026
 
-SmartSpend is designed to keep your expense data private and local.
+SmartSpend is a personal expense tracker. This policy describes the current iOS app and widget.
 
-## Data SmartSpend Stores
+## Information you enter
 
-SmartSpend stores the data you enter in the app, including expenses, categories, budgets, monthly salary values, recurring expenses, deleted expenses, and app preferences.
+SmartSpend stores expenses, categories, budgets, spending goals, monthly income, recurring expenses, archived expenses, learned suggestions, and app preferences that you enter or create. This information is stored on your device. The app and widget share the information needed by the widget through Apple's App Group storage.
 
-This data is stored on your device. Some data is also shared with the SmartSpend iOS widget through Apple's App Group storage so the widget can show your spending information.
+The current app does not require an account and does not upload your SmartSpend records to a SmartSpend server or sync them through CloudKit. Depending on your device settings, Apple's device backup may include app data; those backups are managed by Apple and your device settings, not by SmartSpend.
 
-## CSV Imports and Exports
+## Imports and exports
 
-When you import a CSV file, SmartSpend reads the file on your device and adds the expenses to your local app data.
+CSV files that you choose to import are processed on your device. When you export data, SmartSpend creates a file on your device and lets you choose where to save or share it. Once you share or save an exported copy elsewhere, that copy is controlled by the destination you chose.
 
-When you export data, SmartSpend creates an export file on your device. You choose where to save or share that file.
+## Analytics, advertising, and tracking
 
-## Tracking and Advertising
+The current app does not include third-party advertising or analytics, does not sell your data, and does not track you across other apps or websites.
 
-SmartSpend does not track you across apps or websites.
+## Support email
 
-SmartSpend does not sell your data.
+If you choose to email support, your email address and anything you include in the message are sent through your email provider. We use that message only to respond to your request. Please do not include financial details that are not needed to explain the issue.
 
-SmartSpend does not show third-party ads.
+## Retention and deletion
 
-## Support Email
+Your SmartSpend records remain on your device until you delete them in Settings or remove the app. An exported file or support email is a separate copy and is not deleted when you clear app data. You can delete exported copies from the places where you saved them. If you restored an iOS device backup, app data may be restored with it.
 
-If you contact support by email, you choose what information to send. Your email address and message are used only to respond to your support request.
+To ask about a support email you sent or this policy, contact us at [tursunov.umidjon.uz@gmail.com](mailto:tursunov.umidjon.uz@gmail.com).
 
-## Accounts and Sync
+## Changes
 
-SmartSpend currently does not require an account and does not upload your data to a SmartSpend server.
-
-If cloud sync or user accounts are added in a future version, this policy will be updated before that feature is released.
-
-## Data Deletion
-
-You can delete app data inside SmartSpend using the data management options. You can also remove the app from your device to delete local app data managed by iOS.
-
-## Contact
-
-For privacy questions, contact:
-
-tursunov.umidjon.uz@gmail.com
+If SmartSpend adds accounts, cloud sync, analytics, or other data practices in a later version, this policy will be updated before those features are released.

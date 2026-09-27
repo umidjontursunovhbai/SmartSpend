@@ -3,985 +3,995 @@ import Charts
 
 struct AnalyticsView: View {
     @ObservedObject private var dataManager = DataManager.shared
-    @State private var selectedTimeframe: TimeFrame = .month
-    @State private var periodOffset: Int = 0  // 0 = current, 1 = previous, ...
-    @State private var compareOption: CompareOption = .previousPeriod
-    @State private var showingBudgetSettings = false
-    @State private var selectedHistoryMonth: MonthBar?
 
+    @State private var selectedTimeframe: TimeFrame = .month
+    @State private var periodOffset = 0
+    @State private var showingAddExpense = false
+    @State private var selectedTrendDate: Date?
+    @State private var selectedMonthDate: Date?
+    @State private var snapshot = AnalyticsSnapshot.empty
 
     enum TimeFrame: String, CaseIterable {
-        case week = "Week"
-        case month = "Month"
-        case year = "Year"
+        case week
+        case month
+        case year
 
-        var localizedName: String {
+        var title: String {
             switch self {
-            case .week:  return "timeframe_week".localized
+            case .week: return "timeframe_week".localized
             case .month: return "timeframe_month".localized
-            case .year:  return "timeframe_year".localized
+            case .year: return "timeframe_year".localized
             }
         }
     }
 
-    enum CompareOption: Hashable {
-        case previousPeriod   // immediately prior week/month/year
-        case sameLastYear     // same window one year earlier
-
-        var localizedName: String {
-            switch self {
-            case .previousPeriod: return "compare_previous_period".localized
-            case .sameLastYear:   return "compare_same_last_year".localized
-            }
-        }
-    }
-    
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 24) {
-                    timeFramePicker
-                    periodNavigator
-                    comparePicker
-                    spendingHighlights
-                    if hasAnyHistoricalData { monthlyHistoryCard }
-                    if hasAnyHistoricalData { yearOverYearCard }
-                    spendingTrendSection
-                    categoryBreakdownSection
-                    categoryBudgetSection
-                    peakSpendingDaysSection
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 16)
-            }
-            .onChange(of: selectedTimeframe) { _, _ in periodOffset = 0 }
-            .onChange(of: selectedTimeframe) { _, _ in
-                // Year-over-year picker doesn't really make sense on Year
-                if selectedTimeframe == .year { compareOption = .previousPeriod }
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("analytics_title".localized)
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("budgets".localized) {
-                        showingBudgetSettings = true
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 20) {
+                    header
+                    periodControls
+                    summaryCard
+
+                    if snapshot.currentExpenses.isEmpty {
+                        emptyState
+                    } else {
+                        trendCard
+                        categoryCard
                     }
-                    .foregroundStyle(.tint)
-                    .fontWeight(.medium)
+
+                    if snapshot.months.contains(where: { $0.amount > 0 }) {
+                        historyCard
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .sheet(isPresented: $showingBudgetSettings) {
-                BudgetSettingsView()
+            .background(Color.white)
+            .navigationBarHidden(true)
+            .sheet(isPresented: $showingAddExpense) {
+                AddExpenseView()
             }
             .onAppear {
-                dataManager.updateSpendingGoalProgress()
+                refreshSnapshot(resetSelections: true)
+            }
+            .onChange(of: selectedTimeframe) { _, _ in
+                periodOffset = 0
+                refreshSnapshot(resetSelections: true)
+            }
+            .onChange(of: periodOffset) { _, _ in
+                refreshSnapshot(resetSelections: true)
+            }
+            .onChange(of: dataManager.expenses) { _, _ in
+                refreshSnapshot()
             }
         }
     }
-    
-    private var timeFramePicker: some View {
-        Picker("Time Frame", selection: $selectedTimeframe) {
-            ForEach(TimeFrame.allCases, id: \.self) { timeFrame in
-                Text(timeFrame.localizedName).tag(timeFrame)
+
+    // MARK: - Header and period controls
+
+    private var header: some View {
+        AppScreenHeader("smartspend".localized) {
+            ActionIconButton(icon: "plus", style: .primary) {
+                showingAddExpense = true
             }
+            .accessibilityLabel("add_expense".localized)
         }
-        .pickerStyle(.segmented)
+        .padding(.horizontal, -16)
     }
 
-    // MARK: - Period navigator (‹ May 2026 ›)
-
-    private var periodNavigator: some View {
-        HStack(spacing: 0) {
-            Button { stepPeriod(by: 1) } label: {
-                Image(systemName: "chevron.left")
-                    .fontWeight(.semibold)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tint)
-
-            Spacer()
-
-            Button {
-                if periodOffset != 0 { periodOffset = 0 }
-            } label: {
-                VStack(spacing: 2) {
-                    Text(periodLabel(for: periodOffset))
-                        .font(.headline)
-                    if periodOffset != 0 {
-                        Text("tap_to_return_today".localized)
-                            .font(.caption2)
-                            .foregroundStyle(.tint)
-                    }
+    private var periodControls: some View {
+        VStack(spacing: 10) {
+            Picker("Time Frame", selection: $selectedTimeframe) {
+                ForEach(TimeFrame.allCases, id: \.self) { timeframe in
+                    Text(timeframe.title).tag(timeframe)
                 }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .pickerStyle(.segmented)
+            .frame(height: 44)
+            .contentShape(Rectangle())
 
-            Spacer()
+            HStack(spacing: 4) {
+                periodButton(forward: false)
 
-            Button { stepPeriod(by: -1) } label: {
-                Image(systemName: "chevron.right")
-                    .fontWeight(.semibold)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(canStepForward ? Color.accentColor : Color.secondary)
-            .disabled(!canStepForward)
-        }
-    }
-
-    // MARK: - Compare picker (Compare to: Previous period ▾)
-
-    @ViewBuilder
-    private var comparePicker: some View {
-        // Year-over-year only makes sense when at least 1 year of data exists,
-        // and we hide the picker entirely on the Year timeframe.
-        let showYoY = selectedTimeframe != .year && hasAnyHistoricalData
-
-        if showYoY {
-            HStack(spacing: 6) {
-                Text("compare_to".localized)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Menu {
-                    Picker("compare_to".localized, selection: $compareOption) {
-                        Text(CompareOption.previousPeriod.localizedName)
-                            .tag(CompareOption.previousPeriod)
-                        Text(CompareOption.sameLastYear.localizedName)
-                            .tag(CompareOption.sameLastYear)
-                    }
+                Button {
+                    guard periodOffset != 0 else { return }
+                    periodOffset = 0
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(compareOption.localizedName)
-                            .fontWeight(.medium)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .font(.subheadline)
-                }
-            }
-            .padding(.horizontal, 4)
-        }
-    }
+                    VStack(spacing: 2) {
+                        Text(periodLabel)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color(.label))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.76)
 
-    // MARK: - 12-month history bar chart
-
-    private var monthlyHistoryCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionHeader("monthly_history".localized)
-
-            Chart {
-                ForEach(last12Months) { bar in
-                    BarMark(
-                        x: .value("Month", bar.label),
-                        y: .value("Amount", bar.amount)
-                    )
-                    .foregroundStyle(bar.isCurrent ? Color.accentColor : Color.accentColor.opacity(0.35))
-                    .cornerRadius(4)
-                }
-            }
-            .chartOverlay { proxy in
-                GeometryReader { geometry in
-                    Rectangle()
-                        .fill(.clear)
-                        .contentShape(Rectangle())
-                        .onTapGesture { location in
-                            selectHistoryMonth(at: location, proxy: proxy, geometry: geometry)
-                        }
-                }
-            }
-            .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 6)) { value in
-                    AxisValueLabel().font(.caption2)
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
-                    AxisGridLine().foregroundStyle(Color(.systemGray5))
-                    AxisValueLabel {
-                        if let raw = value.as(Double.self) {
-                            Text(CurrencyFormatter.formatCompact(raw, currency: dataManager.user.currency))
+                        if periodOffset != 0 {
+                            Text("tap_to_return_today".localized)
                                 .font(.caption2)
+                                .foregroundStyle(Color(.systemBlue))
                         }
                     }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
                 }
-            }
-            .frame(height: 160)
+                .buttonStyle(.plain)
 
-            // Show month picker hint when bars are tappable in .month mode
-            if selectedTimeframe == .month {
-                Text("tap_month_hint".localized)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                periodButton(forward: true)
             }
         }
-        .overlay(alignment: .topTrailing) {
-            if let selectedHistoryMonth {
-                MonthHistoryPopup(
-                    month: selectedHistoryMonth,
-                    currency: dataManager.user.currency
-                )
-                .padding(.top, 42)
-                .padding(.trailing, 12)
-                .transition(.scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity))
-                .onTapGesture {
-                    withAnimation(.snappy) {
-                        self.selectedHistoryMonth = nil
-                    }
-                }
-            }
-        }
-        .cardStyle()
+        .padding(12)
+        .liquidGlassCard(cornerRadius: 20)
     }
 
-    // MARK: - Year-over-year card
+    private func periodButton(forward: Bool) -> some View {
+        let enabled = !forward || periodOffset > 0
 
-    @ViewBuilder
-    private var yearOverYearCard: some View {
-        let currency = dataManager.user.currency
-        let pct: Double? = sameDayLastYearTotal > 0
-            ? ((yearToDateTotal - sameDayLastYearTotal) / sameDayLastYearTotal) * 100
-            : nil
-
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("year_to_date".localized)
-            HStack(alignment: .firstTextBaseline) {
-                Text(CurrencyFormatter.format(yearToDateTotal, currency: currency))
-                    .font(.title2.weight(.semibold))
-                    .fontDesign(.rounded)
-                Spacer()
-                if let pct {
-                    HStack(spacing: 3) {
-                        Image(systemName: pct >= 0 ? "arrow.up.right" : "arrow.down.right")
-                        Text(String(format: "%.1f%%", abs(pct)))
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(pct >= 0 ? Color.green : Color.red)
-                }
-            }
-            if sameDayLastYearTotal > 0 {
-                Text(String(format: "vs_last_year_format".localized,
-                            CurrencyFormatter.format(sameDayLastYearTotal, currency: currency)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("no_last_year_data".localized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        return Button {
+            periodOffset = max(periodOffset + (forward ? -1 : 1), 0)
+        } label: {
+            HeroIcon(forward ? "chevron-right" : "chevron-left", size: 18)
+                .foregroundStyle(enabled ? Color(.systemBlue) : Color(.tertiaryLabel))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
-        .cardStyle()
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel(forward ? "Next period" : "Previous period")
     }
 
-    private var spendingHighlights: some View {
-        VStack(spacing: 0) {
-            // Primary metric
-            VStack(alignment: .leading, spacing: 6) {
-                Text(periodLabel(for: periodOffset).uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(CurrencyFormatter.format(currentPeriodTotal, currency: dataManager.user.currency))
-                    .font(.system(size: 36, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .minimumScaleFactor(0.5)
+    // MARK: - Summary
+
+    private var summaryCard: some View {
+        AnalyticsCard(title: periodLabel) {
+            VStack(alignment: .leading, spacing: 18) {
+                Text(CurrencyFormatter.format(snapshot.total, currency: dataManager.user.currency))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Color(.label))
                     .lineLimit(1)
-                if previousPeriodTotal > 0 {
-                    HStack(spacing: 3) {
-                        Image(systemName: spendingChangePercentage >= 0 ? "arrow.up.right" : "arrow.down.right")
-                        Text(trendSummary)
-                    }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(spendingChangePercentage >= 0 ? Color.green : Color.red)
+                    .minimumScaleFactor(0.46)
+                    .accessibilityLabel(
+                        "Spent \(CurrencyFormatter.formatFull(snapshot.total, currency: dataManager.user.currency))"
+                    )
 
-                    // Show the comparison total so the percentage isn't floating
-                    // — the user sees both periods spelled out.
-                    Text(String(format: "comparison_total_format".localized,
-                                comparisonPeriodLabel,
-                                CurrencyFormatter.format(previousPeriodTotal, currency: dataManager.user.currency)))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                comparisonLine
+
+                HStack(spacing: 0) {
+                    metric(
+                        value: CurrencyFormatter.format(
+                            snapshot.dailyAverage,
+                            currency: dataManager.user.currency
+                        ),
+                        label: "daily_avg".localized
+                    )
+
+                    Divider().frame(height: 36)
+
+                    metric(
+                        value: "\(snapshot.currentExpenses.count)",
+                        label: "Transactions"
+                    )
+
+                    Divider().frame(height: 36)
+
+                    metric(value: budgetMetric.value, label: budgetMetric.label)
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-
-            Divider().padding(.leading, 16)
-
-            // Secondary stats
-            HStack(spacing: 0) {
-                statColumn(title: "daily_avg".localized,
-                           value: CurrencyFormatter.format(averageDailySpend, currency: dataManager.user.currency))
-                Divider().frame(height: 36)
-                statColumn(title: "Transactions", value: "\(expensesCount)")
-                Divider().frame(height: 36)
-                statColumn(title: "categories".localized, value: "\(categoriesUsedCount)")
-            }
-            .padding(.vertical, 12)
-        }
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func statColumn(title: String, value: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.headline)
-                .fontDesign(.rounded)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 8)
-    }
-
-    private var categoryBreakdownSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionHeader("category_breakdown".localized)
-
-            if currentPeriodExpenses.isEmpty {
-                emptyState
-            } else {
-                let data = groupExpensesByCategory(currentPeriodExpenses)
-                HStack(spacing: 20) {
-                    Chart {
-                        ForEach(Array(data.keys), id: \.id) { category in
-                            SectorMark(
-                                angle: .value("Amount", data[category] ?? 0),
-                                innerRadius: .ratio(0.62),
-                                angularInset: 1.5
-                            )
-                            .cornerRadius(4)
-                            .foregroundStyle(category.color)
-                        }
-                    }
-                    .chartLegend(.hidden)
-                    .frame(width: 130, height: 130)
-                    .overlay {
-                        VStack(spacing: 0) {
-                            Text("\(categoriesUsedCount)")
-                                .font(.title2.bold())
-                                .fontDesign(.rounded)
-                            Text("categories".localized)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(data.keys.sorted { (data[$0] ?? 0) > (data[$1] ?? 0) }.prefix(4)), id: \.id) { category in
-                            HStack(spacing: 8) {
-                                Circle().fill(category.color).frame(width: 8, height: 8)
-                                Text(category.name)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text(CurrencyFormatter.format(data[category] ?? 0, currency: dataManager.user.currency))
-                                    .font(.caption.weight(.semibold))
-                            }
-                        }
-                    }
-                }
+                .padding(.vertical, 12)
+                .background(
+                    Color(.secondarySystemBackground).opacity(0.72),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
             }
         }
-        .cardStyle()
     }
 
     @ViewBuilder
-    private var categoryBudgetSection: some View {
-        let activeBudgets = dataManager.categoryBudgets.filter { $0.isEnabled && $0.amount > 0 }
-        if !activeBudgets.isEmpty {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    sectionHeader("budget_progress".localized)
-                    Spacer()
-                    Button("manage".localized) {
-                        showingBudgetSettings = true
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.tint)
-                }
+    private var comparisonLine: some View {
+        if snapshot.previousTotal > 0 {
+            let change = (snapshot.total - snapshot.previousTotal) / snapshot.previousTotal * 100
+            let increased = change >= 0
+            let tint = increased ? Color(.systemRed) : Color(.systemGreen)
 
-                VStack(spacing: 16) {
-                    ForEach(activeBudgets) { budget in
-                        CategoryBudgetRow(budget: budget)
-                    }
+            HStack(spacing: 9) {
+                HeroIcon(increased ? "arrow-trending-up" : "arrow-trending-down", size: 16)
+                    .foregroundStyle(tint)
+                    .frame(width: 32, height: 32)
+                    .background(tint.opacity(0.10), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(formatPercentage(abs(change))) \(increased ? "more" : "less")")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(tint)
+                    Text("Compared with the previous period")
+                        .font(.caption)
+                        .foregroundStyle(Color(.secondaryLabel))
                 }
             }
-            .cardStyle()
+        } else {
+            Text("No spending in the previous period")
+                .font(.caption)
+                .foregroundStyle(Color(.secondaryLabel))
         }
     }
 
-    private var spendingTrendSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    sectionHeader("spending_trends".localized)
-                    Text(trendSubtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if previousPeriodTotal > 0 {
-                    Text(trendSummary)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule().fill(spendingChangePercentage >= 0 ? Color.green.opacity(0.12) : Color.red.opacity(0.12))
-                        )
-                        .foregroundStyle(spendingChangePercentage >= 0 ? Color.green : Color.red)
-                }
-            }
+    private func metric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .fontDesign(.rounded)
+                .monospacedDigit()
+                .foregroundStyle(Color(.label))
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(Color(.secondaryLabel))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+    }
 
-            if spendingTrendPoints.isEmpty {
-                emptyState
-            } else {
+    private var budgetMetric: (value: String, label: String) {
+        if selectedTimeframe == .month, periodOffset == 0, snapshot.salary > 0 {
+            let spendable = dataManager.getSpendableTodaySnapshot()
+            return (
+                CurrencyFormatter.format(spendable.spendableToday, currency: dataManager.user.currency),
+                "spendable_today".localized
+            )
+        }
+
+        guard selectedTimeframe == .month, snapshot.salary > 0 else {
+            return ("\(snapshot.categories.count)", "categories".localized)
+        }
+
+        let remaining = snapshot.salary - snapshot.total
+        return (
+            CurrencyFormatter.format(abs(remaining), currency: dataManager.user.currency),
+            remaining >= 0 ? "Remaining" : "Over income"
+        )
+    }
+
+    // MARK: - Spending trend
+
+    private var trendCard: some View {
+        let selection = selectedTrendPoint
+
+        return AnalyticsCard(
+            title: "spending_trends".localized,
+            detail: selectedTimeframe == .year ? "Monthly totals" : "Daily totals"
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                ChartReadoutSlot(
+                    label: selection.map { selectedDateLabel($0.date) },
+                    amount: selection.map {
+                        CurrencyFormatter.formatFull(
+                            $0.amount,
+                            currency: dataManager.user.currency
+                        )
+                    },
+                    tint: Color(.systemBlue)
+                )
+
                 Chart {
-                    ForEach(spendingTrendPoints) { point in
+                    ForEach(snapshot.trend) { point in
                         AreaMark(
                             x: .value("Date", point.date),
                             y: .value("Amount", point.amount)
                         )
-                        .foregroundStyle(Color.accentColor.opacity(0.18).gradient)
-                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(Color(.systemBlue).opacity(0.08))
+                        .interpolationMethod(.linear)
 
                         LineMark(
                             x: .value("Date", point.date),
                             y: .value("Amount", point.amount)
                         )
-                        .foregroundStyle(Color.accentColor)
-                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(Color(.systemBlue))
+                        .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .interpolationMethod(.linear)
+                    }
+
+                    if let selection {
+                        RuleMark(x: .value("Selected date", selection.date))
+                            .foregroundStyle(Color(.systemBlue).opacity(0.34))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+
+                        PointMark(
+                            x: .value("Selected date", selection.date),
+                            y: .value("Selected amount", selection.amount)
+                        )
+                        .symbolSize(92)
+                        .foregroundStyle(Color.white)
+
+                        PointMark(
+                            x: .value("Selected date", selection.date),
+                            y: .value("Selected amount", selection.amount)
+                        )
+                        .symbolSize(34)
+                        .foregroundStyle(Color(.systemBlue))
                     }
                 }
-                .chartYScale(domain: 0...spendingTrendYAxisMax)
+                .chartXSelection(value: $selectedTrendDate)
+                .chartYScale(domain: 0...chartMaximum(snapshot.trend.map(\.amount).max() ?? 0))
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: selectedTimeframe == .year ? 6 : selectedTimeframe == .week ? 7 : 5)) { value in
-                        AxisGridLine().foregroundStyle(Color(.systemGray6))
-                        AxisTick().foregroundStyle(Color(.systemGray4))
-                        AxisValueLabel(format: selectedTimeframe == .year ? .dateTime.month(.abbreviated) : .dateTime.day().month(.abbreviated))
-                            .font(.caption2)
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks(position: .leading, values: spendingTrendYAxisValues) { value in
-                        AxisGridLine().foregroundStyle(Color(.systemGray5))
+                    AxisMarks(values: .automatic(desiredCount: selectedTimeframe == .week ? 7 : 6)) { value in
+                        AxisGridLine().foregroundStyle(Color.clear)
                         AxisTick().foregroundStyle(Color(.systemGray4))
                         AxisValueLabel {
-                            if let raw = value.as(Double.self) {
-                                Text(CurrencyFormatter.formatChartCompact(raw, currency: dataManager.user.currency))
+                            if let date = value.as(Date.self) {
+                                Text(axisDateLabel(date))
                                     .font(.caption2)
-                                    .monospacedDigit()
+                                    .foregroundStyle(Color(.secondaryLabel))
                             }
                         }
                     }
                 }
-                .frame(height: 200)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                        AxisGridLine().foregroundStyle(Color(.systemGray5))
+                        AxisTick().foregroundStyle(Color.clear)
+                        AxisValueLabel {
+                            if let amount = value.as(Double.self) {
+                                Text(
+                                    CurrencyFormatter.formatChartCompact(
+                                        amount,
+                                        currency: dataManager.user.currency
+                                    )
+                                )
+                                .font(.caption2)
+                                .monospacedDigit()
+                                .foregroundStyle(Color(.secondaryLabel))
+                            }
+                        }
+                    }
+                }
+                .chartLegend(.hidden)
+                .frame(height: 220)
+                .animation(nil, value: selectedTrendDate)
+                .accessibilityLabel("Spending trend for \(periodLabel)")
             }
         }
-        .cardStyle()
     }
 
-    private var peakSpendingDaysSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionHeader("peak_days".localized)
+    // MARK: - Categories
 
-            if peakSpendingDays.isEmpty {
-                emptyState
-            } else {
-                ForEach(Array(peakSpendingDays.prefix(3).enumerated()), id: \.offset) { index, day in
-                    HStack(spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
+    private var categoryCard: some View {
+        AnalyticsCard(
+            title: "category_breakdown".localized,
+            detail: "\(snapshot.categories.count) categories"
+        ) {
+            VStack(spacing: 0) {
+                ForEach(Array(snapshot.categories.prefix(6)).indices, id: \.self) { index in
+                    categoryRow(Array(snapshot.categories.prefix(6))[index])
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(dayLabel(for: day.date))
-                                .font(.subheadline)
-                            Text(day.date.formatted(date: .abbreviated, time: .omitted))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(CurrencyFormatter.format(day.amount, currency: dataManager.user.currency))
-                                .font(.subheadline.weight(.medium))
-                            Text(peakPercentage(for: day.amount))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                    if index < min(snapshot.categories.count, 6) - 1 {
+                        Divider().padding(.leading, 54)
                     }
-                    if index < min(2, peakSpendingDays.count - 1) {
-                        Divider()
-                    }
+                }
+
+                if snapshot.categories.count > 6 {
+                    Text("+\(snapshot.categories.count - 6) more categories")
+                        .font(.caption)
+                        .foregroundStyle(Color(.secondaryLabel))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.top, 10)
                 }
             }
         }
-        .cardStyle()
     }
 
-    // MARK: - Shared building blocks
+    private func categoryRow(_ category: CategoryAmount) -> some View {
+        let share = snapshot.total > 0 ? category.amount / snapshot.total : 0
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.headline)
-    }
+        return HStack(spacing: 12) {
+            HeroIcon(systemName: category.category.iconSystemName, size: 20)
+                .foregroundStyle(category.category.color)
+                .frame(width: 42, height: 42)
+                .background(
+                    category.category.color.opacity(0.09),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
 
-    private var emptyState: some View {
-        Text("no_expenses_found".localized)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 100, alignment: .center)
-    }
-    
-    
-    // MARK: - Helper Methods
-    
-    private func expensesForCurrentPeriod() -> [Expense] {
-        expenses(for: selectedTimeframe, offset: periodOffset)
-    }
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(category.category.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(.label))
+                        .lineLimit(1)
 
-    private func expensesForPreviousPeriod() -> [Expense] {
-        guard let interval = comparisonInterval else { return [] }
-        return dataManager.expenses.filter { interval.contains($0.date) }
-    }
+                    Spacer(minLength: 8)
 
-    private func expenses(for timeframe: TimeFrame, offset: Int) -> [Expense] {
-        guard let interval = periodRange(for: timeframe, offset: offset) else { return [] }
-        return dataManager.expenses.filter { interval.contains($0.date) }
-    }
+                    Text(CurrencyFormatter.format(category.amount, currency: dataManager.user.currency))
+                        .font(.subheadline.weight(.semibold))
+                        .fontDesign(.rounded)
+                        .monospacedDigit()
+                        .foregroundStyle(Color(.label))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.62)
+                }
 
-    /// Date interval the user is comparing the current period against.
-    private var comparisonInterval: DateInterval? {
-        let calendar = Calendar.current
-        switch compareOption {
-        case .previousPeriod:
-            return periodRange(for: selectedTimeframe, offset: periodOffset + 1)
-        case .sameLastYear:
-            guard let current = periodRange(for: selectedTimeframe, offset: periodOffset),
-                  let start = calendar.date(byAdding: .year, value: -1, to: current.start),
-                  let end = calendar.date(byAdding: .year, value: -1, to: current.end) else { return nil }
-            return DateInterval(start: start, end: end)
+                GeometryReader { geometry in
+                    Capsule()
+                        .fill(Color(.systemGray5))
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(category.category.color)
+                                .frame(
+                                    width: max(
+                                        4,
+                                        geometry.size.width * CGFloat(min(max(share, 0), 1))
+                                    )
+                                )
+                        }
+                }
+                .frame(height: 5)
+
+                Text("\(formatPercentage(share * 100)) of this period")
+                    .font(.caption2)
+                    .foregroundStyle(Color(.secondaryLabel))
+            }
         }
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
     }
 
-    /// Human-readable label for the comparison window (e.g. "Apr 2026" or "May 2025").
-    private var comparisonPeriodLabel: String {
-        let calendar = Calendar.current
-        switch compareOption {
-        case .previousPeriod:
-            return periodLabel(for: periodOffset + 1)
-        case .sameLastYear:
-            guard let current = periodRange(for: selectedTimeframe, offset: periodOffset),
-                  let lastYearStart = calendar.date(byAdding: .year, value: -1, to: current.start) else { return "" }
-            let formatter = DateFormatter()
-            switch selectedTimeframe {
-            case .week:
-                formatter.dateFormat = "MMM d, yyyy"
-                return formatter.string(from: lastYearStart)
-            case .month:
-                formatter.dateFormat = "MMMM yyyy"
-                return formatter.string(from: lastYearStart)
-            case .year:
-                formatter.dateFormat = "yyyy"
-                return formatter.string(from: lastYearStart)
+    // MARK: - Twelve-month history
+
+    private var historyCard: some View {
+        let selection = selectedMonth
+
+        return AnalyticsCard(
+            title: "monthly_history".localized,
+            detail: "Touch or drag"
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                ChartReadoutSlot(
+                    label: selection?.date.formatted(.dateTime.month(.wide).year()),
+                    amount: selection.map {
+                        CurrencyFormatter.formatFull(
+                            $0.amount,
+                            currency: dataManager.user.currency
+                        )
+                    },
+                    tint: Color(.systemTeal)
+                )
+
+                Chart {
+                    ForEach(snapshot.months) { month in
+                        BarMark(
+                            x: .value("Month", month.date),
+                            y: .value("Amount", month.amount)
+                        )
+                        .foregroundStyle(historyBarColor(month))
+                        .cornerRadius(4)
+                    }
+
+                    if let selection {
+                        RuleMark(x: .value("Selected month", selection.date))
+                            .foregroundStyle(Color(.systemTeal).opacity(0.34))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    }
+                }
+                .chartXSelection(value: $selectedMonthDate)
+                .chartYScale(domain: 0...chartMaximum(snapshot.months.map(\.amount).max() ?? 0))
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .month, count: 2)) { value in
+                        AxisGridLine().foregroundStyle(Color.clear)
+                        AxisTick().foregroundStyle(Color.clear)
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(date.formatted(.dateTime.month(.abbreviated)))
+                                    .font(.caption2)
+                                    .foregroundStyle(Color(.secondaryLabel))
+                            }
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                        AxisGridLine().foregroundStyle(Color(.systemGray5))
+                        AxisTick().foregroundStyle(Color.clear)
+                        AxisValueLabel {
+                            if let amount = value.as(Double.self) {
+                                Text(
+                                    CurrencyFormatter.formatChartCompact(
+                                        amount,
+                                        currency: dataManager.user.currency
+                                    )
+                                )
+                                .font(.caption2)
+                                .monospacedDigit()
+                                .foregroundStyle(Color(.secondaryLabel))
+                            }
+                        }
+                    }
+                }
+                .chartLegend(.hidden)
+                .frame(height: 196)
+                .animation(nil, value: selectedMonthDate)
+                .accessibilityLabel("Spending over the last twelve months")
             }
         }
     }
 
-    private func periodRange(for timeframe: TimeFrame, offset: Int) -> DateInterval? {
-        let calendar = Calendar.current
-        let now = Date()
+    // MARK: - Empty state
 
-        switch timeframe {
-        case .week:
-            guard let referenceDate = calendar.date(byAdding: .weekOfYear, value: -offset, to: now),
-                  let interval = calendar.dateInterval(of: .weekOfYear, for: referenceDate) else { return nil }
-            return interval
-        case .month:
-            guard let referenceDate = calendar.date(byAdding: .month, value: -offset, to: now),
-                  let interval = calendar.dateInterval(of: .month, for: referenceDate) else { return nil }
-            return interval
-        case .year:
-            guard let referenceDate = calendar.date(byAdding: .year, value: -offset, to: now),
-                  let interval = calendar.dateInterval(of: .year, for: referenceDate) else { return nil }
-            return interval
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            HeroIcon("chart-bar", size: 27)
+                .foregroundStyle(Color(.systemBlue))
+                .frame(width: 52, height: 52)
+                .background(Color(.systemBlue).opacity(0.08), in: Circle())
+
+            Text("No spending in this period")
+                .font(.headline)
+                .foregroundStyle(Color(.label))
+
+            Text("Choose another period or add an expense to see trends and categories.")
+                .font(.subheadline)
+                .foregroundStyle(Color(.secondaryLabel))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 30)
+        .analyticsCardSurface()
+    }
+
+    // MARK: - Snapshot calculation
+
+    private func refreshSnapshot(resetSelections: Bool = false) {
+        let next = makeSnapshot()
+        snapshot = next
+
+        if resetSelections || nearestTrendPoint(to: selectedTrendDate, in: next.trend) == nil {
+            selectedTrendDate = next.trend.last(where: { $0.amount > 0 })?.date
+                ?? next.trend.last?.date
+        }
+
+        if resetSelections || nearestMonth(to: selectedMonthDate, in: next.months) == nil {
+            selectedMonthDate = next.months.last(where: { $0.amount > 0 })?.date
+                ?? next.months.last?.date
         }
     }
 
-    private var canStepForward: Bool { periodOffset > 0 }
-    private func stepPeriod(by delta: Int) {
-        // Pressing back (delta = +1) takes us further into the past.
-        periodOffset = max(periodOffset + delta, 0)
-    }
-    
-    private var currentPeriodExpenses: [Expense] {
-        expensesForCurrentPeriod()
-    }
-    
-    private var previousPeriodExpenses: [Expense] {
-        expensesForPreviousPeriod()
-    }
-    
-    private var currentPeriodTotal: Double {
-        currentPeriodExpenses.reduce(0) { $0 + $1.amount }
-    }
-    
-    private var previousPeriodTotal: Double {
-        previousPeriodExpenses.reduce(0) { $0 + $1.amount }
-    }
-    
-    private var spendingChangePercentage: Double {
-        guard previousPeriodTotal > 0 else { return currentPeriodTotal > 0 ? 100 : 0 }
-        return ((currentPeriodTotal - previousPeriodTotal) / previousPeriodTotal) * 100
-    }
-    
-    private var spendingChangeDescription: String? {
-        guard previousPeriodTotal > 0 else { return nil }
-        let direction = spendingChangePercentage >= 0 ? "increase".localized : "decrease".localized
-        return "\(String(format: "%.1f", abs(spendingChangePercentage)))% \(direction)"
-    }
-    
-    private var trendSubtitle: String {
-        "\(periodLabel(for: periodOffset)) vs \(comparisonPeriodLabel)"
+    private func makeSnapshot() -> AnalyticsSnapshot {
+        guard let interval = periodInterval(timeframe: selectedTimeframe, offset: periodOffset),
+              let previous = previousInterval(for: interval) else {
+            return .empty
+        }
+
+        let currentExpenses = dataManager.expenses.filter { interval.contains($0.date) }
+        let comparisonExpenses = dataManager.expenses.filter { previous.contains($0.date) }
+        let total = currentExpenses.reduce(0) { $0 + $1.amount }
+        let previousTotal = comparisonExpenses.reduce(0) { $0 + $1.amount }
+
+        return AnalyticsSnapshot(
+            currentExpenses: currentExpenses,
+            total: total,
+            previousTotal: previousTotal,
+            dailyAverage: dailyAverage(total: total, interval: interval),
+            salary: selectedSalary,
+            categories: categoryTotals(currentExpenses),
+            trend: trendPoints(currentExpenses, interval: interval),
+            months: lastTwelveMonths()
+        )
     }
 
-    /// Just the percentage with arrow text; period name is rendered separately.
-    private var trendPercentText: String {
-        guard previousPeriodTotal > 0 else { return "no_change".localized }
-        return "\(String(format: "%.1f%%", abs(spendingChangePercentage)))"
+    private func periodInterval(timeframe: TimeFrame, offset: Int) -> DateInterval? {
+        let calendar = Calendar.current
+
+        switch timeframe {
+        case .week:
+            guard let date = calendar.date(byAdding: .weekOfYear, value: -offset, to: Date()) else {
+                return nil
+            }
+            return calendar.dateInterval(of: .weekOfYear, for: date)
+
+        case .month:
+            guard let date = calendar.date(byAdding: .month, value: -offset, to: Date()) else {
+                return nil
+            }
+            return calendar.dateInterval(of: .month, for: date)
+
+        case .year:
+            guard let date = calendar.date(byAdding: .year, value: -offset, to: Date()) else {
+                return nil
+            }
+            return calendar.dateInterval(of: .year, for: date)
+        }
     }
 
-    /// Full badge text, including the period it's compared against, so the user
-    /// never has to wonder which two windows the percentage refers to.
-    private var trendSummary: String {
-        guard previousPeriodTotal > 0 else { return "no_change".localized }
-        return String(format: "vs_period_pct_format".localized,
-                      trendPercentText, comparisonPeriodLabel)
+    private func previousInterval(for current: DateInterval) -> DateInterval? {
+        guard let fullPrevious = periodInterval(
+            timeframe: selectedTimeframe,
+            offset: periodOffset + 1
+        ) else {
+            return nil
+        }
+
+        guard periodOffset == 0 else { return fullPrevious }
+
+        let elapsed = max(0, min(Date(), current.end).timeIntervalSince(current.start))
+        return DateInterval(
+            start: fullPrevious.start,
+            end: min(fullPrevious.end, fullPrevious.start.addingTimeInterval(elapsed))
+        )
     }
-    
-    private var averageDailySpend: Double {
-        guard let interval = periodRange(for: selectedTimeframe, offset: 0) else { return 0 }
-        let days = max(interval.duration / 86_400, 1)
-        return currentPeriodTotal / days
-    }
-    
-    private var categoriesUsedCount: Int {
-        Set(currentPeriodExpenses.map { $0.categoryId }).count
-    }
-    
-    private var expensesCount: Int {
-        currentPeriodExpenses.count
-    }
-    
-    private func periodLabel(for offset: Int) -> String {
-        guard let interval = periodRange(for: selectedTimeframe, offset: offset) else { return "-" }
+
+    private var periodLabel: String {
+        guard let interval = periodInterval(
+            timeframe: selectedTimeframe,
+            offset: periodOffset
+        ) else {
+            return "-"
+        }
+
         let formatter = DateFormatter()
+        formatter.locale = Locale.current
+
         switch selectedTimeframe {
         case .week:
             formatter.dateFormat = "MMM d"
-            let end = Calendar.current.date(byAdding: .day, value: -1, to: interval.end) ?? interval.end
+            let end = Calendar.current.date(byAdding: .day, value: -1, to: interval.end)
+                ?? interval.end
             return "\(formatter.string(from: interval.start)) - \(formatter.string(from: end))"
+
         case .month:
             formatter.dateFormat = "MMMM yyyy"
             return formatter.string(from: interval.start)
+
         case .year:
             formatter.dateFormat = "yyyy"
             return formatter.string(from: interval.start)
         }
     }
 
-    // MARK: - 12-month history
-
-    struct MonthBar: Identifiable {
-        let id = UUID()
-        let monthStart: Date
-        let label: String
-        let amount: Double
-        let isCurrent: Bool
-        let offset: Int
+    private func analysisEnd(_ interval: DateInterval) -> Date {
+        let lastMoment = interval.end.addingTimeInterval(-1)
+        return periodOffset == 0 ? min(Date(), lastMoment) : lastMoment
     }
 
-    private var last12Months: [MonthBar] {
+    private func dailyAverage(total: Double, interval: DateInterval) -> Double {
         let calendar = Calendar.current
-        guard let now = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) else { return [] }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
+        let start = calendar.startOfDay(for: interval.start)
+        let end = calendar.startOfDay(for: analysisEnd(interval))
+        let dayCount = max(
+            (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1,
+            1
+        )
+        return total / Double(dayCount)
+    }
 
-        var bars: [MonthBar] = []
-        for offsetBack in (0..<12).reversed() {
-            guard let monthStart = calendar.date(byAdding: .month, value: -offsetBack, to: now),
-                  let interval = calendar.dateInterval(of: .month, for: monthStart) else { continue }
-            let total = dataManager.expenses
-                .filter { interval.contains($0.date) }
-                .reduce(0) { $0 + $1.amount }
-            bars.append(MonthBar(
-                monthStart: monthStart,
-                label: formatter.string(from: monthStart),
-                amount: total,
-                isCurrent: offsetBack == periodOffset && selectedTimeframe == .month,
-                offset: offsetBack
-            ))
+    private var selectedSalary: Double {
+        guard selectedTimeframe == .month,
+              let date = periodInterval(timeframe: .month, offset: periodOffset)?.start else {
+            return 0
         }
-        return bars
+
+        let parts = Calendar.current.dateComponents([.year, .month], from: date)
+        guard let year = parts.year, let month = parts.month else { return 0 }
+        return dataManager.getSalaryForMonth(month: month, year: year)
     }
 
-    private var yearToDateTotal: Double {
-        let calendar = Calendar.current
-        let now = Date()
-        guard let yearStart = calendar.dateInterval(of: .year, for: now)?.start else { return 0 }
-        return dataManager.expenses
-            .filter { $0.date >= yearStart && $0.date <= now }
-            .reduce(0) { $0 + $1.amount }
-    }
+    private func categoryTotals(_ expenses: [Expense]) -> [CategoryAmount] {
+        let grouped = Dictionary(grouping: expenses, by: \.categoryId)
 
-    private var sameDayLastYearTotal: Double {
-        let calendar = Calendar.current
-        let now = Date()
-        guard let lastYearSameDay = calendar.date(byAdding: .year, value: -1, to: now),
-              let lastYearStart = calendar.dateInterval(of: .year, for: lastYearSameDay)?.start else { return 0 }
-        return dataManager.expenses
-            .filter { $0.date >= lastYearStart && $0.date <= lastYearSameDay }
-            .reduce(0) { $0 + $1.amount }
-    }
-
-    private var hasAnyHistoricalData: Bool {
-        last12Months.contains { $0.amount > 0 }
-    }
-
-    private func selectHistoryMonth(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
-        guard let plotFrame = proxy.plotFrame else { return }
-        let frame = geometry[plotFrame]
-        guard frame.contains(location) else { return }
-
-        let xPosition = location.x - frame.origin.x
-        guard let monthLabel = proxy.value(atX: xPosition, as: String.self),
-              let month = last12Months.first(where: { $0.label == monthLabel }) else { return }
-
-        withAnimation(.snappy) {
-            selectedHistoryMonth = month
+        return grouped.map { categoryID, values in
+            CategoryAmount(
+                category: dataManager.resolveCategory(id: categoryID),
+                amount: values.reduce(0) { $0 + $1.amount }
+            )
         }
+        .sorted { $0.amount > $1.amount }
     }
-    
-    private var spendingTrendPoints: [DailySpendingPoint] {
+
+    private func trendPoints(_ expenses: [Expense], interval: DateInterval) -> [SpendingPoint] {
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: currentPeriodExpenses) { expense in
-            if selectedTimeframe == .year {
-                return calendar.date(from: calendar.dateComponents([.year, .month], from: expense.date)) ?? calendar.startOfDay(for: expense.date)
+        let grouped = Dictionary(grouping: expenses) { expense in
+            trendBucket(expense.date)
+        }
+        .mapValues { values in values.reduce(0) { $0 + $1.amount } }
+
+        var points: [SpendingPoint] = []
+        var cursor = trendBucket(interval.start)
+        let end = analysisEnd(interval)
+        let component: Calendar.Component = selectedTimeframe == .year ? .month : .day
+
+        while cursor <= end {
+            points.append(SpendingPoint(date: cursor, amount: grouped[cursor] ?? 0))
+            guard let next = calendar.date(byAdding: component, value: 1, to: cursor),
+                  next > cursor else {
+                break
             }
-            return calendar.startOfDay(for: expense.date)
+            cursor = next
         }
 
-        return grouped.map { date, expenses in
-            DailySpendingPoint(date: date, amount: expenses.reduce(0) { $0 + $1.amount })
+        return points
+    }
+
+    private func trendBucket(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        if selectedTimeframe == .year {
+            return calendar.date(
+                from: calendar.dateComponents([.year, .month], from: date)
+            ) ?? calendar.startOfDay(for: date)
         }
-        .sorted { $0.date < $1.date }
+        return calendar.startOfDay(for: date)
     }
 
-    private var spendingTrendYAxisMax: Double {
-        let maxAmount = spendingTrendPoints.map(\.amount).max() ?? 0
-        guard maxAmount > 0 else { return 1 }
-        return niceChartMaximum(for: maxAmount)
+    private func lastTwelveMonths() -> [MonthAmount] {
+        let calendar = Calendar.current
+        guard let currentMonth = calendar.date(
+            from: calendar.dateComponents([.year, .month], from: Date())
+        ) else {
+            return []
+        }
+
+        var totals: [Date: Double] = [:]
+        for expense in dataManager.expenses {
+            guard let month = calendar.date(
+                from: calendar.dateComponents([.year, .month], from: expense.date)
+            ) else {
+                continue
+            }
+            totals[month, default: 0] += expense.amount
+        }
+
+        return (0..<12).reversed().compactMap { monthsBack in
+            guard let date = calendar.date(
+                byAdding: .month,
+                value: -monthsBack,
+                to: currentMonth
+            ) else {
+                return nil
+            }
+            return MonthAmount(date: date, amount: totals[date] ?? 0)
+        }
     }
 
-    private var spendingTrendYAxisValues: [Double] {
-        let maxValue = spendingTrendYAxisMax
-        return (0...4).map { maxValue * Double($0) / 4.0 }
+    // MARK: - Selection and formatting
+
+    private var selectedTrendPoint: SpendingPoint? {
+        nearestTrendPoint(to: selectedTrendDate, in: snapshot.trend)
     }
 
-    private func niceChartMaximum(for value: Double) -> Double {
+    private var selectedMonth: MonthAmount? {
+        nearestMonth(to: selectedMonthDate, in: snapshot.months)
+    }
+
+    private func nearestTrendPoint(
+        to date: Date?,
+        in points: [SpendingPoint]
+    ) -> SpendingPoint? {
+        guard let date else { return nil }
+        return points.min {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        }
+    }
+
+    private func nearestMonth(
+        to date: Date?,
+        in months: [MonthAmount]
+    ) -> MonthAmount? {
+        guard let date else { return nil }
+        return months.min {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        }
+    }
+
+    private func selectedDateLabel(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = selectedTimeframe == .year
+            ? "MMMM yyyy"
+            : "EEEE, MMMM d, yyyy"
+        return formatter.string(from: date)
+    }
+
+    private func axisDateLabel(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+
+        switch selectedTimeframe {
+        case .week: formatter.dateFormat = "EEE"
+        case .month: formatter.dateFormat = "d"
+        case .year: formatter.dateFormat = "MMM"
+        }
+        return formatter.string(from: date)
+    }
+
+    private func historyBarColor(_ month: MonthAmount) -> Color {
+        selectedMonth?.date == month.date
+            ? Color(.systemTeal)
+            : Color(.systemTeal).opacity(0.25)
+    }
+
+    private func chartMaximum(_ value: Double) -> Double {
+        guard value > 0 else { return 1 }
+
         let exponent = floor(log10(value))
         let magnitude = pow(10, exponent)
         let normalized = value / magnitude
-
         let rounded: Double
+
         switch normalized {
-        case ...1:
-            rounded = 1
-        case ...2:
-            rounded = 2
-        case ...5:
-            rounded = 5
-        default:
-            rounded = 10
+        case ...1: rounded = 1
+        case ...2: rounded = 2
+        case ...5: rounded = 5
+        default: rounded = 10
         }
 
         return rounded * magnitude
     }
-    
-    private var peakSpendingDays: [PeakSpendingDay] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: currentPeriodExpenses) { calendar.startOfDay(for: $0.date) }
-        return grouped.map { date, expenses in
-            PeakSpendingDay(date: date, amount: expenses.reduce(0) { $0 + $1.amount })
-        }
-        .sorted { $0.amount > $1.amount }
-    }
-    
-    private var highestSpendingDay: PeakSpendingDay? {
-        peakSpendingDays.first
-    }
-    
-    private var lowestSpendingDay: PeakSpendingDay? {
-        peakSpendingDays.last
-    }
-    
-    private func peakPercentage(for amount: Double) -> String {
-        guard currentPeriodTotal > 0 else { return "—" }
-        let share = (amount / currentPeriodTotal) * 100
-        return String(format: "%.1f%%", share)
-    }
-    
-    private func dayLabel(for date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            return "today".localized
-        } else if calendar.isDateInYesterday(date) {
-            return "yesterday".localized
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE"
-            return formatter.string(from: date)
-        }
-    }
-    
-    private func groupExpensesByCategory(_ expenses: [Expense]) -> [UserCategory: Double] {
-        var groups: [UserCategory: Double] = [:]
-        for expense in expenses {
-            let category = dataManager.resolveCategory(id: expense.categoryId)
-            groups[category, default: 0] += expense.amount
-        }
-        return groups
+
+    private func formatPercentage(_ value: Double) -> String {
+        let safe = value.isFinite ? value : 0
+        return safe >= 100 || safe.rounded() == safe
+            ? String(format: "%.0f%%", safe)
+            : String(format: "%.1f%%", safe)
     }
 }
 
-// MARK: - Card style
+private struct AnalyticsCard<Content: View>: View {
+    let title: String
+    let detail: String?
+    let content: Content
 
-private struct AnalyticsCard: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(
-                Color(.secondarySystemGroupedBackground),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
-    }
-}
-
-private extension View {
-    func cardStyle() -> some View { modifier(AnalyticsCard()) }
-}
-
-private struct MonthHistoryPopup: View {
-    let month: AnalyticsView.MonthBar
-    let currency: Currency
-
-    private var monthTitle: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: month.monthStart)
+    init(
+        title: String,
+        detail: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.detail = detail
+        self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(monthTitle)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(CurrencyFormatter.format(month.amount, currency: currency))
-                .font(.subheadline.weight(.bold))
-                .fontDesign(.rounded)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(title)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Color(.label))
+                        .lineLimit(2)
+
+                    Spacer(minLength: 4)
+
+                    if let detail {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(Color(.secondaryLabel))
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .analyticsCardSurface()
+    }
+}
+
+private struct ChartReadout: View {
+    let label: String
+    let amount: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Capsule()
+                .fill(tint)
+                .frame(width: 4, height: 36)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color(.secondaryLabel))
+                    .lineLimit(2)
+
+                Text(amount)
+                    .font(.subheadline.weight(.bold))
+                    .fontDesign(.rounded)
+                    .monospacedDigit()
+                    .foregroundStyle(Color(.label))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.58)
+            }
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color(.separator).opacity(0.35), lineWidth: 1)
+        .padding(.vertical, 10)
+        .background(
+            tint.opacity(0.065),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
-        .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 6)
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(tint.opacity(0.16), lineWidth: 1)
+        }
         .accessibilityElement(children: .combine)
     }
 }
 
-// MARK: - Supporting Views
-
-struct CategoryBudgetRow: View {
-    let budget: CategoryBudget
-    @ObservedObject private var dataManager = DataManager.shared
-    
-    private var spentAmount: Double {
-        let calendar = Calendar.current
-        let now = Date()
-        return dataManager.expenses.filter { expense in
-            calendar.isDate(expense.date, equalTo: now, toGranularity: .month) && expense.categoryId == budget.categoryId
-        }.reduce(0) { $0 + $1.amount }
-    }
-    
-    private var progress: Double {
-        guard budget.amount > 0 else { return 0 }
-        return min(spentAmount / budget.amount, 1.0)
-    }
-    
-    private var categoryInfo: (name: String, icon: String) {
-        let category = dataManager.resolveCategory(id: budget.categoryId)
-        return (category.name, category.iconSystemName)
-    }
-    
-    private var progressColor: Color {
-        if progress >= 1.0 { return .red }
-        if progress > 0.8 { return .orange }
-        return .green
-    }
+private struct ChartReadoutSlot: View {
+    let label: String?
+    let amount: String?
+    let tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label(categoryInfo.name, systemImage: categoryInfo.icon)
-                    .font(.subheadline)
-
-                Spacer()
-
-                Text("\(CurrencyFormatter.format(spentAmount, currency: dataManager.user.currency)) / \(CurrencyFormatter.format(budget.amount, currency: dataManager.user.currency))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        ZStack(alignment: .leading) {
+            if let label, let amount {
+                ChartReadout(label: label, amount: amount, tint: tint)
             }
-
-            ProgressView(value: progress)
-                .tint(progressColor)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 58)
+        .clipped()
+        .allowsHitTesting(false)
     }
 }
 
-struct DailySpendingPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let amount: Double
+private extension View {
+    func analyticsCardSurface() -> some View {
+        background(
+            Color.white,
+            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.black.opacity(0.055), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.035), radius: 12, x: 0, y: 6)
+    }
 }
 
-struct PeakSpendingDay: Identifiable {
-    let id = UUID()
-    let date: Date
-    let amount: Double
-}
+private extension AnalyticsView {
+    struct AnalyticsSnapshot {
+        let currentExpenses: [Expense]
+        let total: Double
+        let previousTotal: Double
+        let dailyAverage: Double
+        let salary: Double
+        let categories: [CategoryAmount]
+        let trend: [SpendingPoint]
+        let months: [MonthAmount]
 
-// MARK: - Extensions
+        static let empty = AnalyticsSnapshot(
+            currentExpenses: [],
+            total: 0,
+            previousTotal: 0,
+            dailyAverage: 0,
+            salary: 0,
+            categories: [],
+            trend: [],
+            months: []
+        )
+    }
+
+    struct CategoryAmount: Identifiable {
+        var id: UUID { category.id }
+        let category: UserCategory
+        let amount: Double
+    }
+
+    struct SpendingPoint: Identifiable {
+        var id: Date { date }
+        let date: Date
+        let amount: Double
+    }
+
+    struct MonthAmount: Identifiable {
+        var id: Date { date }
+        let date: Date
+        let amount: Double
+    }
+}
 
 extension DateFormatter {
     static let shortDate: DateFormatter = {

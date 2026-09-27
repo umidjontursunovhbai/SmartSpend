@@ -64,7 +64,7 @@ struct DeletedExpenseRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: categoryDisplayInfo.icon)
+            HeroIcon(systemName: categoryDisplayInfo.icon)
                 .foregroundStyle(categoryDisplayInfo.color)
                 .frame(width: 28)
 

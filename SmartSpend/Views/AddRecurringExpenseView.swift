@@ -42,7 +42,7 @@ struct AddRecurringExpenseView: View {
                     Picker("frequency".localized, selection: $selectedRecurrence) {
                         ForEach(RecurrenceType.allCases, id: \.self) { recurrence in
                             HStack {
-                                Image(systemName: recurrence.icon)
+                                HeroIcon(systemName: recurrence.icon)
                                 Text(recurrence.rawValue)
                             }
                             .tag(recurrence)
@@ -171,7 +171,7 @@ struct EditRecurringExpenseView: View {
                     Picker("frequency".localized, selection: $selectedRecurrence) {
                         ForEach(RecurrenceType.allCases, id: \.self) { recurrence in
                             HStack {
-                                Image(systemName: recurrence.icon)
+                                HeroIcon(systemName: recurrence.icon)
                                 Text(recurrence.rawValue)
                             }
                             .tag(recurrence)
@@ -299,17 +299,17 @@ struct RecurringCategoryPicker: View {
                     Button {
                         selectedCategory = category
                     } label: {
-                        Label(category.name, systemImage: category.iconSystemName)
+                        HeroIconLabel(title: category.name, systemName: category.iconSystemName)
                     }
                 }
                 Divider()
                 Button(action: onCreateNew) {
-                    Label("create_new_category".localized, systemImage: "plus.circle")
+                    HeroIconLabel(title: "create_new_category".localized, systemName: "plus.circle")
                 }
             } label: {
                 HStack(spacing: 6) {
                     if let category = selectedCategory {
-                        Image(systemName: category.iconSystemName)
+                        HeroIcon(systemName: category.iconSystemName)
                             .foregroundStyle(category.color)
                         Text(category.name)
                             .foregroundStyle(.primary)
@@ -317,7 +317,7 @@ struct RecurringCategoryPicker: View {
                         Text("select_category".localized)
                             .foregroundStyle(.secondary)
                     }
-                    Image(systemName: "chevron.up.chevron.down")
+                    HeroIcon(systemName: "chevron.up.chevron.down")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }

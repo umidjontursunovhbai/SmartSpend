@@ -1,5 +1,7 @@
 # SmartSpend - Deployment Guide
 
+> Historical guide: the bundle ID, version, screenshots, and feature list below are outdated. For the current App Store preparation state and verified release steps, use [APP_STORE_RELEASE.md](APP_STORE_RELEASE.md). Do not change the existing bundle ID or submit using the example metadata below.
+
 This guide will help you deploy SmartSpend to GitHub and prepare it for distribution.
 
 ## 🚀 GitHub Setup

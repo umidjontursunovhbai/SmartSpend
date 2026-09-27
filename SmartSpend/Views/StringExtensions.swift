@@ -46,6 +46,8 @@ extension String {
             "clear_all_data": "Clear All Data",
             "clear_all_data_message": "Are you sure you want to delete all expenses, patterns, and salary data? This action cannot be undone.",
             "features": "Features",
+            "planning": "Planning",
+            "app_setup": "App Setup",
             "budget_goals": "Budget Goals",
             "categories": "Categories",
             "about": "About",
@@ -68,8 +70,22 @@ extension String {
             "no_expenses_yet": "No expenses yet",
             "budget_details": "Budget Details",
             // Dashboard (home)
+            "month_spending": "Spent this month",
+            "monthly_income_used": "Monthly income used",
+            "income_left": "Income left after spending",
+            "over_income": "Spent over monthly income",
+            "daily_guide": "Daily guide",
+            "daily_guide_help": "Estimate after recorded spending and scheduled bills; not your account balance.",
+            "set_income_for_budget": "Set monthly income to see your plan",
+            "other_categories": "Other categories",
+            "add_first_expense": "Add an expense to start tracking.",
+            "previous_months": "Previous months",
             "remaining_this_month": "Remaining This Month",
             "spend_per_day_format": "You can spend %@/day",
+            "spendable_today": "Spendable Today",
+            "spendable_today_help": "Available per day after planned recurring bills",
+            "planned_bills": "Planned Bills",
+            "days_left_format": "%d days left in this month",
             "income_not_set": "Set your monthly income to track your budget.",
             "set_income": "Set Income",
             "this_week": "This Week",
@@ -98,6 +114,7 @@ extension String {
             "time_period_this_month": "This Month",
             "time_period_last_month": "Last Month",
             "time_period_custom": "Custom",
+            "custom": "Custom",
             "search_expenses": "Search expenses...",
             "all": "All",
             "filter": "Filter",
@@ -298,7 +315,12 @@ extension String {
             "coach_tip_set_budget": "Pro Tip: Setting monthly category budgets helps you save 15% more on average. Try setting one in Budget Settings!"
         ]
         
-        // Return the translation if found, otherwise return the key itself
+        let catalogValue = NSLocalizedString(self, comment: "")
+        if catalogValue != self {
+            return catalogValue
+        }
+
+        // Return the fallback translation if the string catalog does not have it.
         return translations[self] ?? self
     }
     

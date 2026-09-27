@@ -21,7 +21,7 @@ struct DataImportView: View {
             VStack(spacing: 20) {
                 // Header
                 VStack(spacing: 12) {
-                    Image(systemName: "square.and.arrow.down")
+                    HeroIcon(systemName: "square.and.arrow.down")
                         .font(.system(size: 50))
                         .foregroundStyle(.blue)
                     
@@ -68,7 +68,7 @@ struct DataImportView: View {
                     Button {
                         showingFormatInfo = true
                     } label: {
-                        Image(systemName: "info.circle")
+                        HeroIcon(systemName: "info.circle")
                             .foregroundStyle(.blue)
                     }
                 }
@@ -112,7 +112,7 @@ struct DataImportView: View {
                 showingFilePicker = true
             } label: {
                 VStack(spacing: 12) {
-                    Image(systemName: "doc.badge.plus")
+                    HeroIcon(systemName: "doc.badge.plus")
                         .font(.system(size: 40))
                         .foregroundStyle(.blue)
                     
@@ -188,7 +188,7 @@ struct DataImportView: View {
     private func selectedFileView(fileURL: URL) -> some View {
         VStack(spacing: 12) {
             HStack {
-                Image(systemName: "doc.text")
+                HeroIcon(systemName: "doc.text")
                     .foregroundStyle(.green)
                 
                 VStack(alignment: .leading, spacing: 2) {
@@ -218,7 +218,7 @@ struct DataImportView: View {
     private func previewSection(previewData: (headers: [String], sampleRows: [[String]], totalRows: Int)) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: "eye")
+                HeroIcon(systemName: "eye")
                     .foregroundStyle(.orange)
                 
                 Text("preview".localized)
@@ -287,7 +287,7 @@ struct DataImportView: View {
                         .scaleEffect(0.8)
                         .tint(.white)
                 } else {
-                    Image(systemName: "square.and.arrow.down")
+                    HeroIcon(systemName: "square.and.arrow.down")
                 }
                 
                 Text(isImporting ? "importing".localized : "import_expenses_cta".localized)
@@ -432,7 +432,7 @@ struct CSVFormatInfoView: View {
                 VStack(spacing: 24) {
                     // Animated Header
                     VStack(spacing: 12) {
-                        Image(systemName: "doc.text.magnifyingglass")
+                        HeroIcon(systemName: "doc.text.magnifyingglass")
                             .font(.system(size: 60))
                             .foregroundStyle(
                                 LinearGradient(
@@ -501,7 +501,7 @@ struct CSVFormatInfoView: View {
                     // Tips Section
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            Image(systemName: "lightbulb.fill")
+                            HeroIcon(systemName: "lightbulb.fill")
                                 .foregroundStyle(.yellow)
                                 .font(.title3)
                             
@@ -559,7 +559,7 @@ struct CSVFormatInfoView: View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
             HStack {
-                Image(systemName: icon)
+                HeroIcon(systemName: icon)
                     .font(.title2)
                     .foregroundStyle(color)
                     .frame(width: 40, height: 40)
@@ -589,7 +589,7 @@ struct CSVFormatInfoView: View {
                 
                 ForEach(requiredColumns, id: \.0) { column in
                     HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill")
+                        HeroIcon(systemName: "checkmark.circle.fill")
                             .foregroundStyle(color)
                             .font(.caption)
                         
@@ -634,7 +634,7 @@ struct CSVFormatInfoView: View {
     
     private func tipRow(icon: String, text: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
+            HeroIcon(systemName: icon)
                 .foregroundStyle(.yellow)
                 .font(.caption)
             

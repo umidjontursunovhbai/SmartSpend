@@ -2,76 +2,106 @@ import SwiftUI
 import Charts
 
 struct DashboardView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var tabManager = TabManager.shared
     @State private var showingAddExpense = false
+    @State private var showingMonthlySalary = false
+    @State private var selectedBudgetAlertCategory: UserCategory?
+    @State private var showingBudgetSettings = false
+    @State private var overview = DashboardOverview(
+        expenses: DataManager.shared.expenses,
+        now: Date()
+    )
 
     private let calendar = Calendar.current
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(spacing: 16) {
-                    remainingBudgetCard
-                    quickStatsCard
-                    if !upcomingBills.isEmpty { upcomingBillsCard }
-                    if !budgetAlerts.isEmpty { budgetAlertsCard }
-                    recentExpensesCard
-                    if !dataManager.spendingGoals.isEmpty {
-                        SpendingGoalsView(goals: dataManager.spendingGoals)
+                LazyVStack(spacing: 18) {
+                    AppScreenHeader("dashboard".localized) {
+                        ActionIconButton(icon: "plus", style: .primary) {
+                            showingAddExpense = true
+                        }
+                        .accessibilityLabel("add_expense".localized)
+                    }
+                    .padding(.horizontal, -iOSDesignSystem.Spacing.screenMargin)
+
+                    monthlyOverviewCard
+                    if !budgetAlerts.isEmpty {
+                        budgetAlertsCard
+                    }
+                    if !upcomingBills.isEmpty {
+                        upcomingBillsCard
+                    }
+                    if !overview.monthExpenses.isEmpty {
+                        categoryCard
+                    }
+                    if !overview.recentExpenses.isEmpty {
+                        recentExpensesCard
+                    } else {
+                        emptyExpensesCard
+                    }
+                    if !overview.previousMonthsWithExpenses.isEmpty {
+                        previousMonthsCard
                     }
                 }
-                .padding(.horizontal)
-                .padding(.vertical)
+                .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
+                .padding(.vertical, iOSDesignSystem.Spacing.screenMargin)
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("smartspend".localized)
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showingAddExpense = true }) {
-                        Image(systemName: "plus")
-                            .font(.title3)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.tint)
-                    }
-                }
-            }
+            .background(iOSDesignSystem.appBackground)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView()
+            }
+            .sheet(isPresented: $showingMonthlySalary) {
+                MonthlySalaryView()
+            }
+            .sheet(item: $selectedBudgetAlertCategory) { category in
+                BudgetSettingsView(focusCategoryID: category.id)
+            }
+            .sheet(isPresented: $showingBudgetSettings) {
+                BudgetSettingsView()
+            }
+            .onAppear(perform: refreshOverview)
+            .onChange(of: dataManager.expenses) { _, _ in
+                refreshOverview()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { refreshOverview() }
             }
         }
     }
 
     private var currency: Currency { dataManager.user.currency }
 
+    private func compactAmount(_ amount: Double) -> String {
+        return CurrencyFormatter.format(amount, currency: currency)
+    }
+
     // MARK: - Derived data
 
-    private var monthExpenses: [Expense] {
-        dataManager.expenses.filter { calendar.isDate($0.date, equalTo: Date(), toGranularity: .month) }
+    private func refreshOverview() {
+        overview = DashboardOverview(expenses: dataManager.expenses, now: Date(), calendar: calendar)
     }
-    private var monthTotal: Double { monthExpenses.reduce(0) { $0 + $1.amount } }
-    private var monthlySalary: Double { dataManager.getCurrentMonthSalary() }
-    private var remaining: Double { monthlySalary - monthTotal }
-    private var budgetProgress: Double { monthlySalary > 0 ? min(monthTotal / monthlySalary, 1) : 0 }
-
-    private var daysRemainingInMonth: Int {
-        let total = calendar.range(of: .day, in: .month, for: Date())?.count ?? 30
-        let day = calendar.component(.day, from: Date())
-        return max(total - day + 1, 1)
+    private var spendableSnapshot: SpendableTodaySnapshot {
+        BudgetPeriodCalculator.spendableToday(
+            monthlyIncome: monthlySalary,
+            expenses: overview.monthExpenses,
+            recurringExpenses: dataManager.recurringExpenses
+        )
     }
-    private var dailyAllowance: Double { max(remaining, 0) / Double(daysRemainingInMonth) }
-
-    private var todayTotal: Double { dataManager.getTodaysExpensesTotal() }
-    private var todayCount: Int { dataManager.getTodaysExpenses().count }
-
-    private var weekTotal: Double {
-        guard let start = calendar.dateInterval(of: .weekOfYear, for: Date())?.start else { return 0 }
-        return dataManager.expenses.filter { $0.date >= start }.reduce(0) { $0 + $1.amount }
-    }
-
-    private var recentExpenses: [Expense] {
-        Array(dataManager.expenses.sorted { $0.date > $1.date }.prefix(5))
+    private var monthlySalary: Double {
+        let now = Date()
+        let month = calendar.component(.month, from: now)
+        let year = calendar.component(.year, from: now)
+        guard let salary = dataManager.monthlySalaries.first(where: {
+            $0.month == month && $0.year == year && $0.currency == currency
+        }) else { return 0 }
+        return salary.amount
     }
 
     private var upcomingBills: [RecurringExpense] {
@@ -83,13 +113,12 @@ struct DashboardView: View {
     }
 
     private var budgetAlerts: [(category: UserCategory, spent: Double, limit: Double)] {
-        dataManager.categoryBudgets
+        let spentByCategory = overview.categoryTotals
+        return dataManager.categoryBudgets
             .filter { $0.isEnabled && $0.amount > 0 }
             .compactMap { budget -> (category: UserCategory, spent: Double, limit: Double)? in
-                let spent = monthExpenses
-                    .filter { $0.categoryId == budget.categoryId }
-                    .reduce(0) { $0 + $1.amount }
-                guard spent > budget.amount * 0.8 else { return nil }
+                let spent = spentByCategory[budget.categoryId, default: 0]
+                guard spent >= budget.amount * 0.8 else { return nil }
                 return (dataManager.resolveCategory(id: budget.categoryId), spent, budget.amount)
             }
             .sorted { ($0.spent / $0.limit) > ($1.spent / $1.limit) }
@@ -97,127 +126,158 @@ struct DashboardView: View {
 
     // MARK: - Cards
 
-    private var remainingBudgetCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("remaining_this_month".localized.uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+    private var monthlyOverviewCard: some View {
+        let spent = overview.monthTotal
+        let incomeLeft = monthlySalary - spent
+        let incomeShare = monthlySalary > 0 ? spent / monthlySalary : 0
+
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("month_spending".localized)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(Date().formatted(.dateTime.month(.wide).year()))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(compactAmount(spent))
+                .font(.system(size: 42, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.45)
+                .contentTransition(.numericText())
+                .accessibilityLabel("\("month_spending".localized), \(CurrencyFormatter.formatFull(spent, currency: currency))")
 
             if monthlySalary > 0 {
-                Text(CurrencyFormatter.format(remaining, currency: currency))
-                    .font(.system(size: 36, weight: .semibold, design: .rounded))
-                    .foregroundStyle(remaining < 0 ? .red : .primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-
-                ProgressView(value: budgetProgress)
-                    .tint(budgetProgress > 0.8 ? Color.red : Color.accentColor)
-
-                if remaining > 0 {
-                    Label(
-                        String(format: "spend_per_day_format".localized,
-                               CurrencyFormatter.format(dailyAllowance, currency: currency)),
-                        systemImage: "calendar.day.timeline.left"
-                    )
-                    .font(.subheadline)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("monthly_income_used".localized)
+                        Spacer()
+                        Text(incomeShare.formatted(.percent.precision(.fractionLength(0))))
+                            .monospacedDigit()
+                    }
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+
+                    ProgressView(value: min(max(incomeShare, 0), 1))
+                        .tint(incomeShare >= 1 ? .red : Color(.systemBlue))
+                        .accessibilityLabel("monthly_income_used".localized)
+                        .accessibilityValue(incomeShare.formatted(.percent.precision(.fractionLength(0))))
                 }
-            } else {
-                Text("income_not_set".localized)
-                    .font(.subheadline)
+
+                Rectangle()
+                    .fill(Color(.separator).opacity(0.55))
+                    .frame(height: 1)
+
+                HStack(alignment: .top, spacing: 12) {
+                    overviewMetric(
+                        title: incomeLeft < 0 ? "over_income".localized : "income_left".localized,
+                        value: compactAmount(abs(incomeLeft)),
+                        color: incomeLeft < 0 ? .red : .primary
+                    )
+                    Rectangle().fill(Color(.separator)).frame(width: 1, height: 38)
+                    overviewMetric(
+                        title: "daily_guide".localized,
+                        value: compactAmount(spendableSnapshot.spendableToday),
+                        color: spendableSnapshot.availableAfterBills < 0 ? .red : .primary
+                    )
+                }
+
+                Text("daily_guide_help".localized)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                Button("set_income".localized) { tabManager.selectedTab = 4 }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Button {
+                    showingMonthlySalary = true
+                } label: {
+                    HStack(spacing: 8) {
+                        HeroIcon("wallet", size: 17)
+                        Text("set_income_for_budget".localized)
+                        Spacer()
+                        HeroIcon("chevron-right", size: 13)
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color(.systemBlue))
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .dashboardCard()
     }
 
-    private var quickStatsCard: some View {
-        HStack(spacing: 0) {
-            statColumn(
-                label: "today".localized,
-                value: CurrencyFormatter.format(todayTotal, currency: currency),
-                sub: todayCount == 1 ? "one_transaction".localized
-                                     : String(format: "transactions_count_format".localized, todayCount)
-            )
-            Divider().frame(height: 42)
-            statColumn(label: "this_week".localized,
-                       value: CurrencyFormatter.format(weekTotal, currency: currency), sub: nil)
-            Divider().frame(height: 42)
-            statColumn(label: "time_period_this_month".localized,
-                       value: CurrencyFormatter.format(monthTotal, currency: currency), sub: nil)
-        }
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func statColumn(label: String, value: String, sub: String?) -> some View {
-        VStack(spacing: 3) {
+    private func overviewMetric(title: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(value)
-                .font(.headline)
+                .font(.title3.weight(.semibold))
                 .fontDesign(.rounded)
+                .monospacedDigit()
+                .foregroundStyle(color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
-            Text(label)
+            Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if let sub {
-                Text(sub).font(.caption2).foregroundStyle(.tertiary)
-            }
+                .lineLimit(2)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var upcomingBillsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            cardHeader("upcoming_bills".localized)
-            VStack(spacing: 0) {
-                ForEach(Array(upcomingBills.enumerated()), id: \.element.id) { index, bill in
-                    let cat = dataManager.resolveCategory(id: bill.categoryId)
-                    HStack(spacing: 12) {
-                        Image(systemName: cat.iconSystemName).foregroundStyle(cat.color).frame(width: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(bill.title).lineLimit(1)
-                            Text(dueText(bill.nextDueDate))
-                                .font(.caption)
-                                .foregroundStyle(dueColor(bill.nextDueDate))
-                        }
-                        Spacer()
-                        Text(CurrencyFormatter.format(bill.amount, currency: currency)).fontWeight(.medium)
+    private var categoryCard: some View {
+        let leading = Array(overview.sortedCategories.prefix(3))
+        let otherAmount = overview.sortedCategories.dropFirst(3).reduce(0) { $0 + $1.amount }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            cardHeader("category_breakdown".localized)
+
+            ForEach(leading, id: \.categoryID) { item in
+                let category = dataManager.resolveCategory(id: item.categoryID)
+                let share = overview.monthTotal > 0 ? item.amount / overview.monthTotal : 0
+
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(category.color)
+                            .frame(width: 8, height: 8)
+                        Text(category.name)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(compactAmount(item.amount))
+                            .font(.subheadline.weight(.semibold))
+                            .fontDesign(.rounded)
+                            .monospacedDigit()
                     }
-                    .padding(.vertical, 8)
-                    if index < upcomingBills.count - 1 { Divider() }
+                    GeometryReader { geometry in
+                        Capsule()
+                            .fill(Color(.systemGray5))
+                            .overlay(alignment: .leading) {
+                                Capsule()
+                                    .fill(category.color)
+                                    .frame(width: geometry.size.width * min(max(share, 0), 1))
+                            }
+                    }
+                    .frame(height: 5)
+                    .accessibilityHidden(true)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityValue(share.formatted(.percent.precision(.fractionLength(0))))
             }
-        }
-        .dashboardCard()
-    }
 
-    private var budgetAlertsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            cardHeader("budget_alerts".localized)
-            VStack(spacing: 0) {
-                ForEach(Array(budgetAlerts.enumerated()), id: \.offset) { index, alert in
-                    let over = alert.spent > alert.limit
-                    HStack(spacing: 12) {
-                        Image(systemName: alert.category.iconSystemName)
-                            .foregroundStyle(alert.category.color).frame(width: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(alert.category.name)
-                            Text("\(CurrencyFormatter.format(alert.spent, currency: currency)) / \(CurrencyFormatter.format(alert.limit, currency: currency))")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(over ? "over_budget".localized : "near_limit".localized)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(over ? .red : .orange)
-                    }
-                    .padding(.vertical, 8)
-                    if index < budgetAlerts.count - 1 { Divider() }
+            if otherAmount > 0 {
+                HStack {
+                    Text("other_categories".localized)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(compactAmount(otherAmount))
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
                 }
             }
         }
@@ -226,33 +286,165 @@ struct DashboardView: View {
 
     private var recentExpensesCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            cardHeader("recent_expenses".localized,
-                       actionTitle: recentExpenses.isEmpty ? nil : "view_all".localized) {
-                tabManager.switchToExpensesTab()
+            cardHeader("recent_expenses".localized, actionTitle: "view_all".localized) {
+                tabManager.selectedTab = 1
             }
-            if recentExpenses.isEmpty {
-                Text("no_expenses_yet".localized)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 12)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(recentExpenses.enumerated()), id: \.element.id) { index, expense in
-                        let cat = dataManager.resolveCategory(id: expense.categoryId)
-                        HStack(spacing: 12) {
-                            Image(systemName: cat.iconSystemName).foregroundStyle(cat.color).frame(width: 28)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(expense.title.isEmpty ? cat.name : expense.title).lineLimit(1)
-                                Text(expense.date.formatted(date: .abbreviated, time: .omitted))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(CurrencyFormatter.format(expense.amount, currency: currency)).fontWeight(.medium)
-                        }
-                        .padding(.vertical, 8)
-                        if index < recentExpenses.count - 1 { Divider() }
+
+            ForEach(Array(overview.recentExpenses.prefix(3).enumerated()), id: \.element.id) { index, expense in
+                let category = dataManager.resolveCategory(id: expense.categoryId)
+                HStack(spacing: 12) {
+                    HeroIcon(systemName: category.iconSystemName, size: 20)
+                        .foregroundStyle(category.color)
+                        .frame(width: 30)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(expense.title)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                        Text("\(category.name) · \(expense.date.formatted(.dateTime.month(.abbreviated).day()))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
+                    Spacer(minLength: 8)
+                    Text(compactAmount(expense.amount))
+                        .font(.subheadline.weight(.semibold))
+                        .fontDesign(.rounded)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                }
+                .padding(.vertical, 5)
+
+                if index < min(overview.recentExpenses.count, 3) - 1 {
+                    Divider()
+                }
+            }
+        }
+        .dashboardCard()
+    }
+
+    private var emptyExpensesCard: some View {
+        Button {
+            showingAddExpense = true
+        } label: {
+            HStack(spacing: 12) {
+                HeroIcon("plus", size: 20)
+                    .foregroundStyle(Color(.systemBlue))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("no_expenses_yet".localized)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("add_first_expense".localized)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                HeroIcon("chevron-right", size: 13)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .dashboardCard()
+    }
+
+    private var previousMonthsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            cardHeader("previous_months".localized)
+
+            ForEach(Array(overview.previousMonthsWithExpenses.enumerated()), id: \.element.month) { index, item in
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(item.month.formatted(.dateTime.month(.wide).year()))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 8)
+
+                    Text(compactAmount(item.amount))
+                        .font(.subheadline.weight(.semibold))
+                        .fontDesign(.rounded)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                }
+                .accessibilityElement(children: .combine)
+
+                if index < overview.previousMonthsWithExpenses.count - 1 {
+                    Divider()
+                }
+            }
+        }
+        .dashboardCard()
+    }
+
+    private var upcomingBillsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("upcoming_bills".localized, actionTitle: "view_all".localized) {
+                tabManager.selectedTab = 2
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(upcomingBills.prefix(2).enumerated()), id: \.element.id) { index, bill in
+                    let cat = dataManager.resolveCategory(id: bill.categoryId)
+                    HStack(spacing: 12) {
+                        HeroIcon(systemName: cat.iconSystemName, size: 21).foregroundStyle(cat.color).frame(width: iOSDesignSystem.Size.compactIcon)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(bill.title).lineLimit(1)
+                            Text(dueText(bill.nextDueDate))
+                                .font(.caption)
+                                .foregroundStyle(dueColor(bill.nextDueDate))
+                        }
+                        Spacer()
+                        Text(compactAmount(bill.amount)).fontWeight(.medium)
+                    }
+                    .padding(.vertical, 8)
+                    if index < min(upcomingBills.count, 2) - 1 { Divider() }
+                }
+            }
+        }
+        .dashboardCard()
+    }
+
+    private var budgetAlertsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("budget_alerts".localized, actionTitle: "view_all".localized) {
+                showingBudgetSettings = true
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(budgetAlerts.prefix(2).enumerated()), id: \.offset) { index, alert in
+                    let over = alert.spent > alert.limit
+                    Button {
+                        selectedBudgetAlertCategory = alert.category
+                    } label: {
+                        HStack(spacing: 12) {
+                            HeroIcon(systemName: alert.category.iconSystemName, size: 21)
+                                .foregroundStyle(alert.category.color)
+                                .frame(width: iOSDesignSystem.Size.compactIcon)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(alert.category.name)
+                                    .foregroundStyle(.primary)
+                                Text("\(compactAmount(alert.spent)) / \(compactAmount(alert.limit))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            HStack(spacing: 5) {
+                                Text(over ? "over_budget".localized : "near_limit".localized)
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(over ? .red : .orange)
+                                HeroIcon("chevron-right", size: 12)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens this category's budget settings")
+
+                    if index < min(budgetAlerts.count, 2) - 1 { Divider() }
                 }
             }
         }
@@ -266,7 +458,12 @@ struct DashboardView: View {
             Text(title).font(.headline)
             Spacer()
             if let actionTitle, let action {
-                Button(actionTitle, action: action).font(.subheadline)
+                Button(actionTitle, action: action)
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                    .liquidGlassSurface(Capsule())
+                    .liquidGlassButtonStyle()
             }
         }
     }
@@ -288,11 +485,63 @@ private extension View {
     func dashboardCard() -> some View {
         self
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(
-                Color(.secondarySystemGroupedBackground),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
+            .padding(iOSDesignSystem.Spacing.screenMargin)
+            .liquidGlassCard()
+    }
+
+}
+
+struct DashboardOverview {
+    struct CategorySpend {
+        let categoryID: UUID
+        let amount: Double
+    }
+
+    struct MonthSpend {
+        let month: Date
+        let amount: Double
+    }
+
+    let monthExpenses: [Expense]
+    let monthTotal: Double
+    let categoryTotals: [UUID: Double]
+    let sortedCategories: [CategorySpend]
+    let recentExpenses: [Expense]
+    let previousMonthsWithExpenses: [MonthSpend]
+
+    init(expenses: [Expense], now: Date, calendar: Calendar = .current) {
+        let month = BudgetPeriodCalculator.monthInterval(containing: now, calendar: calendar)
+        let current = expenses.filter { month.contains($0.date) && $0.date <= now }
+        let totals = current.reduce(into: [UUID: Double]()) { result, expense in
+            result[expense.categoryId, default: 0] += expense.amount
+        }
+
+        monthExpenses = current
+        monthTotal = current.reduce(0) { $0 + $1.amount }
+        categoryTotals = totals
+        sortedCategories = totals
+            .map { CategorySpend(categoryID: $0.key, amount: $0.value) }
+            .sorted {
+                if $0.amount != $1.amount { return $0.amount > $1.amount }
+                return $0.categoryID.uuidString < $1.categoryID.uuidString
+            }
+        recentExpenses = expenses.filter { $0.date <= now }.sorted {
+            if $0.date != $1.date { return $0.date > $1.date }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+
+        let historicalTotals = expenses.reduce(into: [Date: Double]()) { result, expense in
+            guard expense.date <= now,
+                  let monthStart = calendar.dateInterval(of: .month, for: expense.date)?.start else {
+                return
+            }
+            result[monthStart, default: 0] += expense.amount
+        }
+        previousMonthsWithExpenses = Array(historicalTotals
+            .filter { $0.key < month.start && $0.value > 0 }
+            .map { MonthSpend(month: $0.key, amount: $0.value) }
+            .sorted { $0.month > $1.month }
+            .prefix(3))
     }
 }
 
@@ -361,7 +610,7 @@ struct BudgetDetailsView: View {
                     Button(action: {
                         showingCustomMonthPicker = true
                     }) {
-                        Image(systemName: "pencil.circle.fill")
+                        HeroIcon(systemName: "pencil.circle.fill")
                             .font(.title3)
                             .foregroundStyle(.tint)
                     }
@@ -386,7 +635,7 @@ struct BudgetDetailsView: View {
                         }
                     }) {
                         HStack(spacing: 8) {
-                            Image(systemName: period.icon)
+                            HeroIcon(systemName: period.icon)
                                 .font(.title3)
                                 .foregroundStyle(dataManager.selectedTimePeriod == period ? .white : .primary)
                             
@@ -426,7 +675,7 @@ struct BudgetDetailsView: View {
         VStack(spacing: 20) {
             // Header
             HStack {
-                Label("budget_overview".localized, systemImage: "chart.pie.fill")
+                HeroIconLabel(title: "budget_overview".localized, systemName: "chart.pie.fill")
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
@@ -480,7 +729,7 @@ struct BudgetDetailsView: View {
     private var categoryBreakdownCard: some View {
         VStack(spacing: 16) {
             HStack {
-                Label("category_breakdown".localized, systemImage: "chart.bar.fill")
+                HeroIconLabel(title: "category_breakdown".localized, systemName: "chart.bar.fill")
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
@@ -579,7 +828,7 @@ struct CategoryBreakdownRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
+            HeroIcon(systemName: icon)
                 .foregroundStyle(color)
                 .font(.title3)
                 .frame(width: 32, height: 32)
@@ -614,14 +863,14 @@ struct SalaryHeaderView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("monthly_salary".localized, systemImage: "dollarsign.circle.fill")
+                HeroIconLabel(title: "monthly_salary".localized, systemName: "dollarsign.circle.fill")
                     .font(.headline)
                     .foregroundStyle(.secondary)
                 
                 Spacer()
                 
                 Button(action: onEditSalary) {
-                    Image(systemName: "pencil.circle.fill")
+                    HeroIcon(systemName: "pencil.circle.fill")
                         .font(.title3)
                         .foregroundStyle(.tint)
                 }
@@ -762,7 +1011,7 @@ struct CategoryBreakdownView: View {
 
             if breakdown.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "chart.pie")
+                    HeroIcon(systemName: "chart.pie")
                         .font(.title)
                         .foregroundStyle(.tertiary)
                     Text("no_expenses_yet".localized)
@@ -854,7 +1103,7 @@ struct CustomMonthPickerView: View {
                             selectionStep = .firstDate
                         }) {
                             HStack(spacing: 8) {
-                                Image(systemName: "calendar.badge.plus")
+                                HeroIcon(systemName: "calendar.badge.plus")
                                     .font(.system(size: 14, weight: .medium))
                                 Text("from".localized)
                                     .font(.system(size: 14, weight: .medium))
@@ -873,7 +1122,7 @@ struct CustomMonthPickerView: View {
                             selectionStep = .secondDate
                         }) {
                             HStack(spacing: 8) {
-                                Image(systemName: "calendar.badge.clock")
+                                HeroIcon(systemName: "calendar.badge.clock")
                                     .font(.system(size: 14, weight: .medium))
                                 Text("to".localized)
                                     .font(.system(size: 14, weight: .medium))
@@ -898,7 +1147,7 @@ struct CustomMonthPickerView: View {
                     // Month Navigation
                     HStack {
                         Button(action: previousMonth) {
-                            Image(systemName: "chevron.left")
+                            HeroIcon(systemName: "chevron.left")
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(Color(.systemBlue))
                                 .frame(width: 36, height: 36)
@@ -915,7 +1164,7 @@ struct CustomMonthPickerView: View {
                         Spacer()
                         
                         Button(action: nextMonth) {
-                            Image(systemName: "chevron.right")
+                            HeroIcon(systemName: "chevron.right")
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(Color(.systemBlue))
                                 .frame(width: 36, height: 36)

@@ -21,20 +21,6 @@ struct CurrencyFormatter {
         return f
     }()
 
-    private static func fullFormatter(for currency: Currency) -> NumberFormatter {
-        cacheQueue.sync {
-            if let f = fullCache[currency.rawValue] { return f }
-            let f = NumberFormatter()
-            f.numberStyle = .currency
-            f.currencyCode = currency.rawValue
-            f.locale = currency.locale
-            f.minimumFractionDigits = 2
-            f.maximumFractionDigits = 2
-            fullCache[currency.rawValue] = f
-            return f
-        }
-    }
-
     private static func compactFormatter(for currency: Currency) -> NumberFormatter {
         cacheQueue.sync {
             if let f = compactCache[currency.rawValue] { return f }
@@ -51,17 +37,44 @@ struct CurrencyFormatter {
     // MARK: - Public API
 
     static func format(_ amount: Double, currency: Currency) -> String {
-        if let formatted = fullFormatter(for: currency).string(from: NSNumber(value: amount)) {
-            return formatted
+        if shouldUseCompactDisplay(amount, currency: currency) {
+            return formatChartCompact(amount, currency: currency)
         }
-        return "\(amount) \(currency.symbol)"
+
+        return formatFull(amount, currency: currency)
+    }
+
+    static func formatFull(_ amount: Double, currency: Currency) -> String {
+        cacheQueue.sync {
+            let formatter: NumberFormatter
+            if let cached = fullCache[currency.rawValue] {
+                formatter = cached
+            } else {
+                formatter = NumberFormatter()
+                if currency == .uzs {
+                    formatter.numberStyle = .decimal
+                    formatter.locale = Locale(identifier: "en_US")
+                    formatter.groupingSeparator = ","
+                } else {
+                    formatter.numberStyle = .currency
+                    formatter.currencyCode = currency.rawValue
+                    formatter.locale = currency.locale
+                }
+                fullCache[currency.rawValue] = formatter
+            }
+
+            let hasCents = currency != .uzs && amount.isFinite && amount.rounded() != amount
+            formatter.minimumFractionDigits = hasCents ? 2 : 0
+            formatter.maximumFractionDigits = currency == .uzs ? 0 : 2
+            if let formatted = formatter.string(from: NSNumber(value: amount)) {
+                return currency == .uzs ? "\(formatted) so'm" : formatted
+            }
+            return "\(amount) \(currency.symbol)"
+        }
     }
 
     static func formatCompact(_ amount: Double, currency: Currency) -> String {
-        if let formatted = compactFormatter(for: currency).string(from: NSNumber(value: amount)) {
-            return formatted
-        }
-        return "\(Int(amount)) \(currency.symbol)"
+        formatChartCompact(amount, currency: currency)
     }
 
     static func formatChartCompact(_ amount: Double, currency: Currency) -> String {
@@ -92,7 +105,11 @@ struct CurrencyFormatter {
         case .uzs:
             return "\(sign)\(number)\(suffix) so'm"
         default:
-            return "\(sign)\(currency.rawValue) \(number)\(suffix)"
+            let symbol = localizedCurrencySymbol(for: currency)
+            if symbol == currency.rawValue {
+                return "\(sign)\(currency.rawValue) \(number)\(suffix)"
+            }
+            return "\(sign)\(symbol)\(number)\(suffix)"
         }
     }
 
@@ -102,5 +119,22 @@ struct CurrencyFormatter {
 
     static func formatWithSymbol(_ amount: Double, currency: Currency) -> String {
         format(amount, currency: currency)
+    }
+
+    private static func shouldUseCompactDisplay(_ amount: Double, currency: Currency) -> Bool {
+        let absolute = abs(amount)
+        switch currency {
+        case .uzs, .irr, .idr, .vnd, .krw:
+            return absolute >= 100_000
+        case .jpy, .clp, .cop, .huf:
+            return absolute >= 1_000_000
+        default:
+            return absolute >= 10_000
+        }
+    }
+
+    private static func localizedCurrencySymbol(for currency: Currency) -> String {
+        let formatter = compactFormatter(for: currency)
+        return formatter.currencySymbol ?? currency.rawValue
     }
 }

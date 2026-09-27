@@ -2,56 +2,33 @@ import SwiftUI
 
 struct ExpenseRowView: View {
     let expense: Expense
-    @ObservedObject private var dataManager = DataManager.shared
+    let categoryDisplayInfo: (name: String, icon: String, color: Color)
+    let currency: Currency
+    let isSelectionMode: Bool
+    let isSelected: Bool
+    let onToggleSelection: () -> Void
+    let onDelete: () -> Void
+
     @State private var showingEditExpense = false
-    @Binding var isSelectionMode: Bool
-    @Binding var selectedExpenses: Set<UUID>
-
-    private var isSelected: Bool {
-        selectedExpenses.contains(expense.id)
-    }
-
-    private var categoryDisplayInfo: (name: String, icon: String, color: Color) {
-        let category = dataManager.resolveCategory(id: expense.categoryId)
-        return (category.name, category.iconSystemName, category.color)
-    }
 
     var body: some View {
         Button(action: {
             if isSelectionMode {
-                toggleSelection()
+                onToggleSelection()
             } else {
                 showingEditExpense = true
             }
         }) {
             HStack(spacing: 14) {
-                if isSelectionMode {
-                    ZStack {
-                        Circle()
-                            .stroke(isSelected ? categoryDisplayInfo.color : Color(.systemGray3), lineWidth: 2)
-                            .frame(width: 24, height: 24)
-                        if isSelected {
-                            Circle()
-                                .fill(categoryDisplayInfo.color)
-                                .frame(width: 24, height: 24)
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
-
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.thinMaterial)
-                        .frame(width: 46, height: 46)
+                        .fill(Color(.secondarySystemGroupedBackground))
+                        .frame(width: iOSDesignSystem.Size.rowIcon, height: iOSDesignSystem.Size.rowIcon)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .stroke(categoryDisplayInfo.color.opacity(0.28), lineWidth: 1)
                         )
-                    Image(systemName: categoryDisplayInfo.icon)
-                        .font(.system(size: 19, weight: .medium))
+                    HeroIcon(systemName: categoryDisplayInfo.icon, size: 21)
                         .foregroundStyle(categoryDisplayInfo.color)
                 }
 
@@ -67,25 +44,35 @@ struct ExpenseRowView: View {
 
                 Spacer(minLength: 8)
 
-                Text(formatCurrency(expense.amount, dataManager.user.currency))
+                Text(formatCurrency(expense.amount))
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .multilineTextAlignment(.trailing)
+
+                if isSelectionMode {
+                    selectionMark
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, iOSDesignSystem.Spacing.xSmall)
+            .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressEffectButtonStyle())
-        .listRowInsets(EdgeInsets(top: 4, leading: isSelectionMode ? 8 : 16, bottom: 4, trailing: 16))
+        .listRowInsets(EdgeInsets(top: iOSDesignSystem.Spacing.xSmall,
+                                  leading: iOSDesignSystem.Spacing.screenMargin,
+                                  bottom: iOSDesignSystem.Spacing.xSmall,
+                                  trailing: iOSDesignSystem.Spacing.screenMargin))
         .contextMenu {
             Button(action: { showingEditExpense = true }) {
-                Label("Edit", systemImage: "pencil")
+                HeroIconLabel(title: "Edit", systemName: "pencil")
             }
             Button(role: .destructive, action: {
-                withAnimation {
-                    dataManager.moveToDeletedExpenses(expense)
-                }
+                onDelete()
             }) {
-                Label("Delete", systemImage: "trash")
+                HeroIconLabel(title: "Delete", systemName: "trash")
             }
         }
         .sheet(isPresented: $showingEditExpense) {
@@ -93,18 +80,24 @@ struct ExpenseRowView: View {
         }
     }
 
-    private func toggleSelection() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            if isSelected {
-                selectedExpenses.remove(expense.id)
-            } else {
-                selectedExpenses.insert(expense.id)
-            }
-        }
+    private func formatCurrency(_ amount: Double) -> String {
+        return CurrencyFormatter.format(amount, currency: currency)
     }
 
-    private func formatCurrency(_ amount: Double, _ currency: Currency) -> String {
-        return CurrencyFormatter.format(amount, currency: currency)
+    private var selectionMark: some View {
+        ZStack {
+            Circle()
+                .stroke(isSelected ? categoryDisplayInfo.color : Color(.systemGray3), lineWidth: 2)
+
+            if isSelected {
+                Circle()
+                    .fill(categoryDisplayInfo.color)
+
+                HeroIcon("check", size: 12)
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: 24, height: 24)
     }
 }
 
