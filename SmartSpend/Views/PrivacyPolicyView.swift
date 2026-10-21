@@ -3,7 +3,7 @@ import SwiftUI
 struct PrivacyPolicyView: View {
     @Environment(\.dismiss) private var dismiss
 
-    private let effectiveDate = "October 20, 2026"
+    private let effectiveDate = "October 21, 2026"
 
     var body: some View {
         NavigationStack {
@@ -63,15 +63,30 @@ struct PrivacyPolicyView: View {
                             PolicySection(
                                 icon: "wifi",
                                 tint: Color(.systemOrange),
-                                title: "No account or cloud sync",
-                                text: "The current build does not require an account and does not sync your SmartSpend records to CloudKit or a SmartSpend server."
+                                title: "Local use without an account",
+                                text: "Local expense tracking does not require an account. Connected sync is optional and off by default. SmartSpend does not use CloudKit to sync your records."
                             ),
                             PolicySection(
                                 icon: "trash",
                                 tint: Color(.systemRed),
                                 title: "Delete your app data",
-                                text: "You can use Clear All Data in Settings to remove your SmartSpend records and reset app preferences. Export files are separate copies and are not recalled or deleted by that action; remove them from any location where you saved or shared them."
+                                text: "Clear All Data removes local SmartSpend records and resets app preferences. It does not erase exports, server history, backups, or copies in connected services. Disconnect and revoke access separately, and ask your server administrator to remove retained server copies."
                             )
+                        ]
+                    )
+
+                    policyGroup(
+                        title: "Optional connected sync",
+                        sections: [
+                            PolicySection(icon: "arrow-up-tray", tint: Color(.systemBlue),
+                                          title: "Only after you enable it",
+                                          text: "Connected sync sends expenses, archived expenses, categories, currency and timezone to SmartSpend's configured sync service after separate consent. Budgets, salary and recorded audio are not included. Changes and older versions are retained for history and restore. A random installation credential is stored in this iPhone's Keychain to keep your ledger separate; it is not a cross-device account or recovery service."),
+                            PolicySection(icon: "key", tint: Color(.systemIndigo),
+                                          title: "Connected services and AI clients",
+                                          text: "You choose your own Google or Notion account and which Notion pages to share. Provider tokens are encrypted on the sync service; the phone's separate credential stays in Keychain. An independently authorized MCP AI client can access only its granted ledger permissions, but connecting Google or Notion does not authorize an AI client. Provider policies also apply. Disconnecting does not erase server history, backups or external copies. Contact support about retained service copies, and manage external copies and permissions in the connected account."),
+                            PolicySection(icon: "document", tint: Color(.systemTeal),
+                                          title: "Existing Notion table previews",
+                                          text: "After you select a shared table and approve a preview, its expense rows are read by the sync service to check your column and category mapping. A preview does not import rows into your ledger, start sync, or change the Notion table.")
                         ]
                     )
 
@@ -163,7 +178,7 @@ struct PrivacyPolicyView: View {
                     icon: "arrow-up-tray",
                     tint: Color(.systemGreen),
                     title: "You choose when it leaves",
-                    detail: "Through exports, support email, or voice text you explicitly send to AI"
+                    detail: "Through exports, support email, consented AI drafts, or optional connected sync"
                 )
             }
             .padding(.horizontal, 18)
